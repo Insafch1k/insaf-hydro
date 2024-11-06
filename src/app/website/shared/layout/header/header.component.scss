@@ -1,0 +1,25 @@
+header{user-select: none;}
+.TopHeader{
+    display: flex;
+    width: 100%;
+    height: 33px;
+    background-color: rgba(0, 129, 236, 1);
+    h2{font-size: 14px;}
+    .first{
+        margin-left: 12.5%;
+    }
+    .second{
+        margin-left: 25%;
+    }
+    .IconsHead{
+        margin-left: 12%;
+        display: flex;
+        img{
+            margin-left: 7px;
+            cursor: pointer;
+        }
+    }
+    .search{
+        margin-left: 10%;
+    }
+}

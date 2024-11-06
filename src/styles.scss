@@ -1,1 +1,33 @@
-/* You can add global styles to this file, and also import other style files */
+@font-face {
+    font-family: "Montserrat";
+    font-weight: 400;
+    src: local("Montserrat"),
+        url("../src/assets/data/fonts/Montserrat-Regular.woff") format("woff");
+}
+
+@font-face {
+    font-family: "Montserrat";
+    font-weight: 500;
+    src: local("Montserrat"),
+        url("../src/assets/data/fonts/Montserrat-Medium.woff") format("woff");
+}
+
+@font-face {
+    font-family: "Montserrat";
+    font-weight: 600;
+    src: local("Montserrat"),
+        url("../src/assets/data/fonts/Montserrat-SemiBold.woff") format("woff");
+}
+body {
+    background-color:#ffffff;
+    font-family: "Montserrat";
+}
+h1 {
+    font-weight: 600;
+}
+h2 {
+    font-weight: 500;
+}
+p {
+    font-weight: 400;
+}
