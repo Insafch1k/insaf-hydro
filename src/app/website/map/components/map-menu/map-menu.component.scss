@@ -1,0 +1,29 @@
+#menu {
+    position: fixed;
+    top: 30px;
+    height: 40px;
+    background-color: #2B3943;
+    width: 100%;
+    user-select: none;
+    display: flex; /* Убедитесь, что flexbox включен для контейнера */
+    align-items: center; /* Центрирование по вертикали */
+}
+
+.menu-list {
+    display: flex;
+    align-items: center;
+    margin: 0; /* Убедитесь, что отступы не мешают центрированию */
+    padding: 0; /* Убедитесь, что отступы не мешают центрированию */
+    list-style-type: none; /* Убираем маркеры списка */
+}
+
+.menu-list li {
+    cursor: pointer;
+    padding: 8px 10px;
+    font-size: 18px;
+    color: #ffffff;
+}
+
+.menu-list li:hover {
+    background-color: #182026;
+}

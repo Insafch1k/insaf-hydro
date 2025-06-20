@@ -1,0 +1,169 @@
+.passport-block {
+  width: 450px;
+  min-width: 300px;
+  max-width: 600px;
+  min-height: 160px;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  border: none;
+  position: absolute;
+  background-color: rgba(240, 243, 248, 1);
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  pointer-events: auto;
+
+  &.minimized {
+    width: 300px !important;
+    min-width: 250px !important;
+    height: 30px !important;
+    background-color: transparent !important;
+    border-radius: 10px;
+    cursor: pointer;
+    overflow: hidden;
+  }
+}
+
+.header-passport {
+  height: 20px;
+  background-color: rgba(37, 111, 255, 1);
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  user-select: none;
+  cursor: move;
+
+  p {
+    padding: 3px;
+    color: rgba(240, 243, 248, 1);
+    padding-left: 10px;
+    align-items: center;
+    font-size: 14px;
+    margin-top: 2px;
+  }
+
+  .right-icons {
+    display: flex;
+    align-items: end;
+    margin-bottom: 2px;
+    margin-right: 10px;
+    gap: 5px;
+
+    img {
+      padding: 3px;
+      width: 10px;
+      cursor: pointer;
+    }
+  }
+}
+
+.main-block {
+  padding: 5px 0;
+  flex: 1 1 auto;
+  background-color: rgba(240, 243, 248, 1);
+  display: flex;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.left-column {
+  width: calc(100% - 150px);
+  min-width: 120px;
+  border-right: 1px solid black;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.right-column {
+  flex: 1;
+  min-width: 100px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.data-row {
+  height: 22px;
+  line-height: 22px;
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.right-column .data-row {
+  padding-left: 0;
+  padding-right: 10px;
+  justify-content: center;
+  text-align: center;
+}
+
+.resize-handle {
+  position: absolute;
+  right: -5px;
+  top: 0;
+  width: 10px;
+  height: 100%;
+  background: transparent;
+  cursor: ew-resize;
+}
+
+.footer-passport {
+  border-top: 1px solid black;
+  height: 20px;
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+  background-color: rgba(240, 243, 248, 1);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+
+  span {
+    font-size: 14px;
+  }
+
+  svg {
+    width: 20px;
+    height: 20px;
+    fill: #000;
+    background-color: transparent;
+    transition: all 0.3s ease;
+
+    &:hover {
+      fill: #fff;
+      background-color: rgba(37, 111, 255, 1);
+      border-radius: 50%;
+      padding: 4px;
+    }
+  }
+}
+
+.resize-width {
+  position: absolute;
+  right: -5px;
+  top: 0;
+  width: 5px;
+  height: 100%;
+  cursor: ew-resize;
+  border-radius: 0 10px 10px 0;
+}
+
+.resize-height {
+  position: absolute;
+  bottom: -5px;
+  left: 0;
+  width: 100%;
+  height: 5px;
+  cursor: ns-resize;
+  border-radius: 0 0 10px 10px;
+}

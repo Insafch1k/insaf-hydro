@@ -1,0 +1,95 @@
+<div class="left-header">
+	<div class="navigator-block">
+	  <p>Навигатор</p>
+	  <div id="navigator-map" class="navigator-map"></div>
+	</div>
+  
+	<div class="layers-block">
+	  <p>Слои</p>
+	  <div class="layers">
+		<div class="layer-item">
+		  <img
+			class="arrow"
+			[src]="isObjectTypesOpen ? '../../../../../assets/data/icon/strelka-down.svg' : '../../../../../assets/data/icon/strelka.svg'"
+			alt="Arrow"
+			(click)="toggleObjectTypes()"
+		  />
+		  <img (click)="toggleObjectTypes()" src="../../../../../assets/data/icon/folder.svg" alt="Folder" />
+		  <label (click)="toggleObjectTypes()">Типы объектов</label>
+		  <input
+			type="checkbox"
+			checked
+			(change)="toggleGroupVisibility('wells', $event); toggleGroupVisibility('pipes', $event); toggleGroupVisibility('users', $event)"
+		  />
+		</div>
+  
+		<div *ngIf="isObjectTypesOpen" class="sub-layers">
+		  <!-- Скважины -->
+		  <div *ngIf="wells.length > 0" class="layer-item sub-layer">
+			<img
+			  class="arrow"
+			  [src]="isWellsOpen ? '../../../../../assets/data/icon/strelka-down.svg' : '../../../../../assets/data/icon/strelka.svg'"
+			  alt="Arrow"
+			  (click)="toggleWells()"
+			/>
+			<label (click)="toggleWells()">Скважины</label>
+			<input type="checkbox" checked (change)="toggleGroupVisibility('wells', $event)" />
+		  </div>
+		  <div *ngIf="isWellsOpen && wells.length > 0" class="sub-layers">
+			<div *ngFor="let well of wells" class="layer-item sub-sub-layer">
+			  <label>Скважина ({{ well.id }})</label>
+			  <input
+				type="checkbox"
+				[checked]="well.visible"
+				(change)="toggleWellVisibility(well.id, $event)"
+			  />
+			</div>
+		  </div>
+  
+		  <!-- Трубы -->
+		  <div *ngIf="pipes.length > 0" class="layer-item sub-layer">
+			<img
+			  class="arrow"
+			  [src]="isPipesOpen ? '../../../../../assets/data/icon/strelka-down.svg' : '../../../../../assets/data/icon/strelka.svg'"
+			  alt="Arrow"
+			  (click)="togglePipes()"
+			/>
+			<label (click)="togglePipes()">Трубы</label>
+			<input type="checkbox" checked (change)="toggleGroupVisibility('pipes', $event)" />
+		  </div>
+		  <div *ngIf="isPipesOpen && pipes.length > 0" class="sub-layers">
+			<div *ngFor="let pipe of pipes" class="layer-item sub-sub-layer">
+			  <label>Труба ({{ pipe.id }})</label>
+			  <input
+				type="checkbox"
+				[checked]="pipe.visible"
+				(change)="togglePipeVisibility(pipe.id, $event)"
+			  />
+			</div>
+		  </div>
+  
+		  <!-- Потребители -->
+		  <div *ngIf="users.length > 0" class="layer-item sub-layer">
+			<img
+			  class="arrow"
+			  [src]="isUsersOpen ? '../../../../../assets/data/icon/strelka-down.svg' : '../../../../../assets/data/icon/strelka.svg'"
+			  alt="Arrow"
+			  (click)="toggleUsers()"
+			/>
+			<label (click)="toggleUsers()">Потребители</label>
+			<input type="checkbox" checked (change)="toggleGroupVisibility('users', $event)" />
+		  </div>
+		  <div *ngIf="isUsersOpen && users.length > 0" class="sub-layers">
+			<div *ngFor="let user of users" class="layer-item sub-sub-layer">
+			  <label>Потребитель ({{ user.id }})</label>
+			  <input
+				type="checkbox"
+				[checked]="user.visible"
+				(change)="toggleUserVisibility(user.id, $event)"
+			  />
+			</div>
+		  </div>
+		</div>
+	  </div>
+	</div>
+  </div>

@@ -1,0 +1,77 @@
+#header {
+    position: fixed;
+    top: 0;
+    display: flex;
+    height: 30px;
+    background-color: #182026;
+    width: 100%;
+    user-select: none;
+}
+
+.home {
+    cursor: pointer;
+    background-color: #256fff;
+    display: flex;
+    justify-content: center;
+    width: 20px;
+    height: 100%;
+    padding: 5px;
+
+    &:hover {
+        background-color: #00369f;
+    }
+}
+
+.windows {
+    display: flex;
+}
+
+.map-name {
+    cursor: pointer;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #ffffff;
+    font-size: 14px;
+    padding: 5px 10px;
+
+    & .map-list {
+        width: 12px;
+    }
+
+    &:hover {
+        background-color: #2b3943;
+        // background-image: url('../../../../../assets/data/icon/map-module/actions/close-white.svg');
+        // background-repeat: no-repeat;
+        // background-position: 95% 50%;
+    }
+
+    & .close {
+        position: absolute;
+        top: 0;
+        right: 0;
+        background-color: #2b3943;
+        padding: 10px 5px;
+        & img {
+            width: 10px;
+            height: 10px;
+        }
+        &:hover {
+            background-color: #256fff;
+        }
+    }
+}
+
+div.map-uno {
+    font-size: 18px;
+    padding: 5px 20px;
+}
+
+.plus-window {
+    cursor: pointer;
+    padding: 10px;
+    &:hover {
+        background-color: #2b3943;
+    }
+}

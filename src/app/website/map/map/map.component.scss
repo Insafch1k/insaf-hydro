@@ -1,0 +1,214 @@
+.map-top {
+  padding-top: 20px;
+  display: flex;
+}
+
+.left-head {
+  margin-top: 50px;
+}
+
+header {
+  margin-top: 3.5px;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.tooltip-container {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+  user-select: none;
+  img {
+    width: 25px;
+  }
+}
+
+.tooltip {
+  visibility: hidden;
+  position: absolute;
+  top: 105%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(24, 32, 38, 1);
+  color: rgba(240, 243, 248, 1);
+  padding: 7px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  white-space: nowrap;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.tooltip-container:hover .tooltip {
+  visibility: visible;
+  opacity: 1;
+}
+
+svg {
+  cursor: pointer;
+  transition: background 0.3s;
+  padding: 7px;
+  border-radius: 5px;
+}
+
+svg path {
+  transition: fill 0.3s;
+}
+
+svg.active {
+  background: #005dc0;
+  border-color: #005dc0;
+}
+
+svg.active path {
+  fill: rgb(255, 255, 255);
+}
+
+svg:hover {
+  background: rgba(24, 32, 38, 1);
+}
+
+svg:hover path {
+  fill: white;
+}
+
+button {
+  margin-left: 10px;
+  padding: 8px 16px;
+  border: 1px solid #ccc;
+  background: #f5f5f5;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.3s;
+}
+
+button.active {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+button:hover {
+  background: #e0e0e0;
+}
+
+.container {
+  margin-top: 50px;
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 70px);
+  width: 100%;
+}
+
+.context-menu {
+  position: absolute;
+  background: white;
+  border: 1px solid #ccc;
+  z-index: 9999;
+  padding: 4px 8px;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+}
+
+.context-menu div {
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.context-menu div:hover {
+  background: rgba(24, 32, 38, 1);
+  color: #eee;
+}
+
+.border-to-map {
+  margin-top: 40px;
+}
+
+.map-container {
+  flex-grow: 1;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  z-index: 0;
+  max-height: calc(100vh - 117px);
+  overflow: hidden;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.passport-container {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: calc(100% - 20px);
+  height: calc(100vh - 140px);
+  max-height: calc(100% - 20px);
+  box-sizing: border-box;
+  z-index: 1000;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.passport {
+  position: relative;
+  pointer-events: auto;
+}
+
+.leaflet-overlay-pane svg {
+  z-index: 400;
+  pointer-events: all;
+}
+
+.pipe-temp-overlay {
+  stroke: transparent !important;
+  stroke-opacity: 0 !important;
+}
+
+.leaflet-objects {
+  .well {
+    cursor: pointer;
+    circle {
+      transition: fill 0.3s, filter 0.3s;
+    }
+    image {
+      transition: transform 0.3s;
+    }
+    &:hover {
+      circle {
+        fill: #1e90ff; /* Brighter blue */
+        filter: drop-shadow(0 0 5px rgba(0, 144, 255, 0.5)); /* Glow */
+      }
+      image {
+        transform: scale(1.1); /* Slight scale up */
+      }
+    }
+  }
+
+  .pipe-temp {
+    cursor: pointer;
+    transition: stroke 0.3s, stroke-width 0.3s;
+    &:hover {
+      stroke: #1e90ff; /* Brighter blue */
+      stroke-width: 3; /* Thicker line */
+    }
+  }
+
+  .pipe-temp-overlay {
+    cursor: pointer;
+    transition: stroke-width 0.3s;
+  }
+
+  .user-icon {
+    cursor: pointer;
+    transition: transform 0.3s, filter 0.3s;
+    &:hover {
+      transform: scale(1.2); /* Scale up */
+      filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.5)); /* Glow */
+    }
+  }
+}

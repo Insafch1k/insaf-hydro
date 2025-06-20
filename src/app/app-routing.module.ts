@@ -1,22 +1,24 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 import { MainComponent } from './website/shared/pages/main/main.component';
+import { AboutComponent } from './website/modules/about/about/about.component';
+import { MapComponent } from './website/map/map/map.component';
 
 
 
 const routes: Routes = [
   {
     path: '',
-    component: MainComponent,
+    component: MapComponent,
     title: 'main',
 },
 {
-  path: 'about',
+  path: 'map',
   loadChildren: () =>
-      import('./website/modules/about/about.module').then(
-          (m) => m.AboutModule
+      import('./website/map/map.module').then(
+          (m) => m.MapModule
       ),
-  title: 'about',
+  title: 'map',
 },
 {
   path: '**',

@@ -1,0 +1,134 @@
+.left-header {
+  width: 15.5vw;
+  min-width: 150px;
+  height: calc(100vh - 70px);
+  background: rgb(226, 234, 247);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border-right: 0px solid rgba(24, 32, 38, 1);
+}
+
+.navigator-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 33%;
+  p {
+    margin: 2px 0;
+    padding: 2px 0;
+    text-align: center;
+    font-size: 14px;
+    width: 100%;
+    background-color: rgba(24, 32, 38, 1);
+    color: rgba(255, 255, 255, 1);
+    user-select: none;
+  }
+}
+
+.navigator-map {
+  width: 98%;
+  aspect-ratio: 1/1;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.layers-block {
+  width: 100%;
+  height: 67%;
+  display: flex;
+  flex-direction: column;
+  p {
+    margin: 2px 0;
+    padding: 2px 0;
+    text-align: center;
+    font-size: 14px;
+    width: 100%;
+    background-color: rgba(24, 32, 38, 1);
+    color: rgba(255, 255, 255, 1);
+  }
+}
+
+.layers {
+  padding: 5px;
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+  cursor: pointer;
+  font-size: 14px;
+
+  img.arrow {
+    width: 10px;
+    margin-right: 5px;
+  }
+
+  img:not(.arrow) {
+    width: 15px;
+    margin-right: 5px;
+  }
+
+  label {
+    flex-grow: 1;
+    font-weight: 400;
+    margin-right: 5px;
+  }
+
+  input[type="checkbox"] {
+    cursor: pointer;
+  }
+}
+
+.sub-layers {
+  padding-left: 10px;
+}
+
+.sub-layer {
+  padding-left: 15px;
+}
+
+.sub-sub-layer {
+  padding-left: 30px;
+}
+
+.layers-block input[type="checkbox"] {
+  margin-left: auto;
+}
+
+.layers {
+  height: 100%;
+  overflow: auto;
+}
+
+/* Стилизация для WebKit-браузеров */
+.layers::-webkit-scrollbar {
+  width: 8px; /* Ширина вертикального скроллбара */
+  height: 8px; /* Высота горизонтального скроллбара */
+}
+
+.layers::-webkit-scrollbar-track {
+  background: #1e1e1e; /* Цвет фона трека (полосы) */
+  border-radius: 4px; /* Округление углов трека */
+}
+
+.layers::-webkit-scrollbar-thumb {
+  background: #555; /* Цвет "бегунка" */
+  border-radius: 4px; /* Округление углов бегунка */
+}
+
+.layers::-webkit-scrollbar-thumb:hover {
+  background: #777; /* Цвет бегунка при наведении */
+}
+
+/* Для Firefox */
+.layers {
+  scrollbar-color:  rgba(24, 32, 38, 1) rgb(226, 234, 247); /* Цвет бегунка и трека */
+  scrollbar-width: thin; /* Толщина скроллбара */
+}
+
+
+
+
