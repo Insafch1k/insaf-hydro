@@ -26,11 +26,18 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   private subscription: Subscription;
   private state: { wells: Well[]; pipes: Pipe[]; users: User[] } = { wells: [], pipes: [], users: [] };
   passports: { id: number; type: 'well' | 'pipe' | 'user'; data: any }[] = [];
+  pipeDiameter: number | null = null;
+  showDiameterDialog: boolean = false;
+  pipeDiameterInput: number | null = null;
+  editMode: boolean = false;
+  private dragState: any = null;
+  private _dragActive = false;
+  private tempLine: { from: Point; to: Point } | null = null; // Для пунктирной линии до курсора
 
   constructor(private objectService: ObjectService) {
     this.subscription = this.objectService.getState().subscribe(state => {
       this.state = state;
-      this.redrawAll(state.wells, state.pipes, state.users);
+      this.redrawAll();
     });
   }
 
@@ -38,7 +45,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     this.map = L.map('map', {
       attributionControl: false,
       zoomControl: false
-    }).setView([55.81773887844533, 49.12457564650256], 15);
+    }).setView([55.00, 28.00], 15);
 
     L.tileLayer(
       'http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
@@ -61,8 +68,50 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       .style('width', '100%')
       .style('height', '100%');
 
+    let isMiddleDragging = false;
+    let lastMousePos: { x: number; y: number } | null = null;
+    const mapContainer = this.map.getContainer();
+
+    mapContainer.addEventListener('contextmenu', (e: MouseEvent) => {
+      e.preventDefault();
+    });
+
+    mapContainer.addEventListener('mousedown', (e: MouseEvent) => {
+      if (e.button === 1) {
+        isMiddleDragging = true;
+        lastMousePos = { x: e.clientX, y: e.clientY };
+        mapContainer.style.cursor = 'grabbing';
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener('mousemove', (e: MouseEvent) => {
+      if (isMiddleDragging && lastMousePos) {
+        const dx = e.clientX - lastMousePos.x;
+        const dy = e.clientY - lastMousePos.y;
+        lastMousePos = { x: e.clientX, y: e.clientY };
+        const currentCenter = this.map.getCenter();
+        const pixelCenter = this.map.latLngToContainerPoint(currentCenter);
+        const newPixelCenter = L.point(pixelCenter.x - dx, pixelCenter.y - dy);
+        const newCenter = this.map.containerPointToLatLng(newPixelCenter);
+        this.map.panTo(newCenter, { animate: false });
+      } else if (this.isDrawingPipe && this.currentPipe.length >= 1) {
+        // Обновляем пунктирную линию до курсора
+        const latlng = this.map.mouseEventToLatLng(e);
+        this.tempLine = { from: this.currentPipe[this.currentPipe.length - 1], to: [latlng.lng, latlng.lat] };
+        this.redrawAllPipes(this.state.pipes, this.state.users);
+      }
+    });
+
+    window.addEventListener('mouseup', (e: MouseEvent) => {
+      if (e.button === 1 && isMiddleDragging) {
+        isMiddleDragging = false;
+        mapContainer.style.cursor = this.selectedTool ? 'crosshair' : this.editMode ? 'pointer' : '';
+      }
+    });
+
     this.map.on('click', (e: L.LeafletMouseEvent) => {
-      if (!this.selectedTool) return;
+      if (!this.selectedTool || this.editMode) return;
       const point: Point = [e.latlng.lng, e.latlng.lat];
       this.handleClickOnMap(e.originalEvent, point);
     });
@@ -90,7 +139,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       this.map.off('click');
       this.map.off('moveend zoomend');
     }
-    console.log('ngOnDestroy: Map component destroyed');
+    window.removeEventListener('mousemove', this.onDragMove);
+    window.removeEventListener('mouseup', this.onDragEnd);
   }
 
   updateSvgTransform() {
@@ -105,10 +155,10 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       return `translate(${p.x}, ${p.y})`;
     });
 
-    this.g.selectAll('rect.pipe-temp').attr('x', (d: Point) => this.map.latLngToLayerPoint(L.latLng(d[1], d[0])).x - 5)
-      .attr('y', (d: Point) => this.map.latLngToLayerPoint(L.latLng(d[1], d[0])).y - 5);
+    this.g.selectAll('rect.pipe-temp').attr('x', (d: Point) => this.map.latLngToLayerPoint(L.latLng(d[1], d[0])).x - 6)
+      .attr('y', (d: Point) => this.map.latLngToLayerPoint(L.latLng(d[1], d[0])).y - 6);
 
-    this.g.selectAll('line.pipe-temp')
+    this.g.selectAll('line.pipe-temp, line.pipe-temp-dash')
       .attr('x1', (d: [Point, Point]) => this.map.latLngToLayerPoint(L.latLng(d[0][1], d[0][0])).x)
       .attr('y1', (d: [Point, Point]) => this.map.latLngToLayerPoint(L.latLng(d[0][1], d[0][0])).y)
       .attr('x2', (d: [Point, Point]) => this.map.latLngToLayerPoint(L.latLng(d[1][1], d[1][0])).x)
@@ -130,18 +180,18 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       this.isDrawingPipe = false;
       this.currentPipe = [];
       this.currentPipeUsers = [];
+      this.tempLine = null;
       this.redrawAllPipes(this.state.pipes, this.state.users);
       this.map.dragging.enable();
-      this.map.getContainer().style.cursor = '';
-      console.log('selectTool: Deselected tool, reset drawing state');
+      this.map.getContainer().style.cursor = this.editMode ? 'pointer' : '';
     } else {
       this.selectedTool = tool;
       this.isDrawingPipe = false;
       this.currentPipe = [];
       this.currentPipeUsers = [];
+      this.tempLine = null;
       this.map.dragging.disable();
       this.map.getContainer().style.cursor = 'crosshair';
-      console.log(`selectTool: Selected tool=${tool}`);
     }
   }
 
@@ -165,14 +215,30 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       .attr('class', 'well')
       .datum(well)
       .on('click', (event: MouseEvent, d: Well) => {
-        event.stopPropagation();
-        this.startPipeFromWell(well.position);
+        if (!this.editMode) {
+          event.stopPropagation();
+          this.startPipeFromWell(well.position);
+        }
       })
-      .on('contextmenu', (event: MouseEvent, d: Well) => {
-        this.showContextMenu(event, 'well', d);
+      .on('mousedown', (event: MouseEvent, d: Well) => {
+        if (this.editMode && event.button === 0) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.startDragWell(event, d);
+        } else if (event.button === 2) {
+          event.preventDefault();
+          this.showContextMenu(event, 'well', d);
+        }
       })
-      .on('mouseover', (event: MouseEvent, d: Well) => {
-        console.log(`addWell: Hover on well id=${d.id}`);
+      .on('mouseover', (event: MouseEvent) => {
+        if (this.editMode && event.currentTarget) {
+          d3.select(event.currentTarget as SVGGElement).select('circle').attr('fill', 'lightblue');
+        }
+      })
+      .on('mouseout', (event: MouseEvent) => {
+        if (this.editMode && event.currentTarget) {
+          d3.select(event.currentTarget as SVGGElement).select('circle').attr('fill', 'blue');
+        }
       });
 
     group.append('circle')
@@ -187,100 +253,96 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       .attr('height', wellSize);
 
     this.updateObjectPositions();
-    console.log(`addWell: Added well id=${well.id}, position=`, well.position);
   }
 
   handlePipeClick(point: Point) {
-    if (!this.isDrawingPipe) {
-      console.log('handlePipeClick: Drawing pipe not active');
-      return;
-    }
-
-    console.log('handlePipeClick: Click for pipe, point:', point, 'currentPipe:', this.currentPipe);
+    if (!this.isDrawingPipe) return;
 
     if (this.currentPipe.length === 0) {
-      console.log('handlePipeClick: Adding first vertex:', point);
       this.currentPipe.push(point);
       this.drawPipeVertex(point, false);
       return;
     }
 
     const lastPoint = this.currentPipe[this.currentPipe.length - 1];
-    console.log('handlePipeClick: Last vertex:', lastPoint);
-
     if (this.skipNextSamePointCheck) {
-      console.log('handlePipeClick: Skipping same point check (pipe start)');
       this.skipNextSamePointCheck = false;
     } else if (this.isSamePoint(point, lastPoint)) {
-      console.log('handlePipeClick: Finalizing pipe due to click on last vertex');
-      this.finalizePipe();
+      if (this.currentPipe.length > 1) {
+        this.showDiameterDialog = true;
+        this.pipeDiameterInput = null;
+        this.isDrawingPipe = false;
+        this.tempLine = null;
+      }
       return;
     }
-
-    console.log('handlePipeClick: Adding vertex:', point);
     this.currentPipe.push(point);
     this.redrawAllPipes(this.state.pipes, this.state.users);
   }
 
   finalizePipe() {
-    console.log('finalizePipe: Finalizing pipe, vertices:', this.currentPipe, 'users:', this.currentPipeUsers);
-    this.isDrawingPipe = false;
-    if (this.currentPipe.length > 1) {
-      this.objectService.addPipe([...this.currentPipe], [...this.currentPipeUsers]);
-      console.log('finalizePipe: Pipe saved');
-    } else {
-      console.log('finalizePipe: Pipe not saved: insufficient vertices');
+    if (this.currentPipe.length > 1 && this.currentPipeUsers.length === 0) {
+      const lastIdx = this.currentPipe.length - 1;
+      const lastPoint = this.currentPipe[lastIdx];
+      const prevPoint = this.currentPipe[lastIdx - 1];
+      this.objectService.addUser(lastPoint);
+      this.currentPipeUsers.push({ from: prevPoint, to: lastPoint });
+    }
+    if (this.currentPipe.length > 1 && this.pipeDiameter != null) {
+      this.objectService.addPipe([...this.currentPipe], [...this.currentPipeUsers], this.pipeDiameter);
     }
     this.currentPipe = [];
     this.currentPipeUsers = [];
+    this.pipeDiameter = null;
+    this.showDiameterDialog = false;
+    this.isDrawingPipe = false;
+    this.tempLine = null;
     this.redrawAllPipes(this.state.pipes, this.state.users);
   }
 
   handleVertexRightClick(point: Point) {
-    if (!this.isDrawingPipe) {
-      console.log('handleVertexRightClick: Drawing pipe not active');
-      return;
-    }
-
-    console.log('handleVertexRightClick: Right-click, point:', point, 'currentPipe:', this.currentPipe);
+    if (!this.isDrawingPipe) return;
 
     const lastIndex = this.currentPipe.length - 1;
     const lastPoint = this.currentPipe[lastIndex];
 
     if (this.isSamePoint(point, lastPoint) && this.currentPipe.length > 1) {
-      console.log('handleVertexRightClick: Right-click on last vertex');
       const userExists = this.state.users.some(u => this.isSamePoint(u.position, point));
       if (!userExists) {
-        console.log('handleVertexRightClick: Adding user:', point);
         this.objectService.addUser(point);
         this.currentPipeUsers.push({
           from: this.currentPipe[this.currentPipe.length - 2],
           to: point
         });
         this.currentPipe.pop();
+        this.tempLine = null;
         this.redrawAllPipes(this.state.pipes, this.state.users);
-      } else {
-        console.log('handleVertexRightClick: User already exists at point');
       }
     }
   }
 
   isSamePoint(a: Point, b: Point | undefined): boolean {
-    if (!b) {
-      console.log('isSamePoint: Second point undefined, not same');
-      return false;
-    }
+    if (!b) return false;
     const p1 = this.map.latLngToLayerPoint(L.latLng(a[1], a[0]));
     const p2 = this.map.latLngToLayerPoint(L.latLng(b[1], b[0]));
     const dx = p1.x - p2.x;
     const dy = p1.y - p2.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
-    console.log('isSamePoint: Comparing points:', a, b, 'distance:', distance);
     return distance < 10;
   }
 
   drawPipeVertex(point: Point, finalized: boolean) {
-    const size = 10;
+    if (this.state.wells.some(w => this.isSamePoint(w.position, point))) {
+      return;
+    }
+    if (finalized && this.state.users.some(u => this.isSamePoint(u.position, point))) {
+      return;
+    }
+
+    const size = 12;
+    const vertexIndex = this.findPipeVertexIndex(point);
+    const pipeId = this.findPipeIdByVertex(point);
+
     this.g.append('rect')
       .attr('class', 'pipe-temp')
       .datum(point)
@@ -288,70 +350,101 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       .attr('height', size)
       .attr('fill', finalized ? 'red' : 'white')
       .attr('stroke', 'black')
-      .attr('stroke-width', 1)
-      .style('cursor', 'pointer')
-      .on('contextmenu', (event: MouseEvent) => {
-        event.preventDefault();
-        this.handleVertexRightClick(point);
+      .attr('stroke-width', 2)
+      .style('cursor', this.editMode ? 'grab' : 'pointer')
+      .on('mousedown', (event: MouseEvent) => {
+        if (this.editMode && event.button === 0 && pipeId !== null && vertexIndex !== null) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.startDragPipeVertex(event, pipeId, vertexIndex);
+        } else if (event.button === 2) {
+          event.preventDefault();
+          this.handleVertexRightClick(point);
+        }
       })
-      .on('mouseover', () => {
-        console.log('drawPipeVertex: Hover on vertex', point);
+      .on('mouseover', (event: MouseEvent) => {
+        if (this.editMode && event.currentTarget) {
+          d3.select(event.currentTarget as SVGRectElement).attr('fill', finalized ? 'pink' : 'lightgray');
+        }
+      })
+      .on('mouseout', (event: MouseEvent) => {
+        if (this.editMode && event.currentTarget) {
+          d3.select(event.currentTarget as SVGRectElement).attr('fill', finalized ? 'red' : 'white');
+        }
       });
+
     this.updateObjectPositions();
   }
 
-  drawLineSegment(from: Point, to: Point) {
-    // Visible line
-    this.g.append('line')
-      .attr('class', 'pipe-temp')
+  drawLineSegment(from: Point, to: Point, isDashed: boolean = false) {
+    const line = this.g.append('line')
+      .attr('class', isDashed ? 'pipe-temp-dash' : 'pipe-temp')
       .datum([from, to])
       .attr('stroke', 'blue')
       .attr('stroke-width', 2)
-      .attr('pointer-events', 'none')
-      .call(() => this.updateObjectPositions());
+      .attr('pointer-events', 'none');
+    
+    if (isDashed) {
+      line.attr('stroke-dasharray', '5,5');
+    }
 
-    // Invisible overlay line for clicking
     this.g.append('line')
       .attr('class', 'pipe-temp-overlay')
       .datum([from, to])
       .attr('stroke', 'transparent')
-      .attr('stroke-width', 10)
+      .attr('stroke-width', 15)
       .attr('pointer-events', 'all')
-      .on('contextmenu', (event: MouseEvent, d: [Point, Point]) => {
-        event.preventDefault();
-        const pipe = this.state.pipes.find(p => p.vertices.some((v, i) => 
-          i > 0 && this.isSamePoint(v, d[1]) && this.isSamePoint(p.vertices[i-1], d[0])
-        ));
-        if (pipe) {
-          this.showContextMenu(event, 'pipe', pipe);
-          console.log('drawLineSegment: Context menu triggered for pipe', pipe.id, 'segment:', d);
-        } else {
-          console.warn('drawLineSegment: No pipe found for segment:', d);
+      .on('mousedown', (event: MouseEvent, d: [Point, Point]) => {
+        if (this.editMode && event.button === 0) {
+          event.preventDefault();
+          event.stopPropagation();
+          const pipeId = this.findPipeIdBySegment(d[0], d[1]);
+          const fromIndex = pipeId !== null ? this.findPipeVertexIndex(d[0], pipeId) : null;
+          const toIndex = pipeId !== null ? this.findPipeVertexIndex(d[1], pipeId) : null;
+          if (pipeId !== null && fromIndex !== null && toIndex !== null) {
+            this.startDragPipeSegment(event, pipeId, fromIndex, toIndex);
+          }
+        } else if (event.button === 2) {
+          event.preventDefault();
+          const pipe = this.state.pipes.find(p => p.vertices.some((v, i) =>
+            i > 0 && this.isSamePoint(v, d[1]) && this.isSamePoint(p.vertices[i - 1], d[0])
+          ));
+          if (pipe) {
+            this.showContextMenu(event, 'pipe', pipe);
+          }
         }
       })
-      .on('mouseover', (event: MouseEvent, d: [Point, Point]) => {
-        console.log('drawLineSegment: Hover on pipe segment', d);
+      .on('mouseover', (event: MouseEvent) => {
+        if (this.editMode && event.currentTarget) {
+          d3.select(event.currentTarget as SVGLineElement).attr('stroke', 'lightgray');
+        }
+      })
+      .on('mouseout', (event: MouseEvent) => {
+        if (this.editMode && event.currentTarget) {
+          d3.select(event.currentTarget as SVGLineElement).attr('stroke', 'transparent');
+        }
       })
       .call(() => this.updateObjectPositions());
   }
 
   redrawAllPipes(pipes: Pipe[], users: User[]) {
-    console.log('redrawAllPipes: Redrawing pipes:', pipes, 'users:', users);
-    this.g.selectAll('.pipe-temp, .pipe-temp-overlay, .user-icon').remove();
+    this.g.selectAll('.pipe-temp, .pipe-temp-overlay, .pipe-temp-dash, .user-icon').remove();
 
+    // Отрисовка завершенных труб (сплошные линии)
     pipes.forEach(pipe => {
       if (!pipe.visible) return;
       pipe.vertices.forEach((pt, i) => {
         this.drawPipeVertex(pt, true);
         if (i > 0) {
-          this.drawLineSegment(pipe.vertices[i - 1], pt);
+          this.drawLineSegment(pipe.vertices[i - 1], pt, false);
         }
       });
       pipe.userConnections.forEach(conn => {
-        this.drawLineSegment(conn.from, conn.to);
+        this.drawLineSegment(conn.from, conn.to, false);
       });
     });
 
+    // Отрисовка пользователей
     users.forEach(user => {
       if (!user.visible) return;
       const pixel = this.map.latLngToLayerPoint(L.latLng(user.position[1], user.position[0]));
@@ -363,23 +456,40 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         .attr('y', pixel.y - 10)
         .attr('width', 20)
         .attr('height', 20)
-        .on('contextmenu', (event: MouseEvent, d: User) => {
-          this.showContextMenu(event, 'user', d);
+        .style('cursor', this.editMode ? 'grab' : 'pointer')
+        .on('mousedown', (event: MouseEvent, d: User) => {
+          if (this.editMode && event.button === 0) {
+            event.preventDefault();
+            event.stopPropagation();
+            this.startDragUser(event, d);
+          } else if (event.button === 2) {
+            event.preventDefault();
+            this.showContextMenu(event, 'user', d);
+          }
         })
-        .on('mouseover', (event: MouseEvent, d: User) => {
-          console.log('redrawAllPipes: Hover on user id=', d.id);
+        .on('mouseover', (event: MouseEvent) => {
+          if (this.editMode && event.currentTarget) {
+            d3.select(event.currentTarget as SVGImageElement).attr('opacity', 0.7);
+          }
+        })
+        .on('mouseout', (event: MouseEvent) => {
+          if (this.editMode && event.currentTarget) {
+            d3.select(event.currentTarget as SVGImageElement).attr('opacity', 1);
+          }
         });
     });
 
+    // Отрисовка текущей трубы (пунктирные линии)
     this.currentPipe.forEach((pt, i) => {
       this.drawPipeVertex(pt, false);
       if (i > 0) {
-        this.drawLineSegment(this.currentPipe[i - 1], pt);
+        this.drawLineSegment(this.currentPipe[i - 1], pt, true);
       }
     });
 
+    // Отрисовка текущих соединений пользователей (пунктирные линии)
     this.currentPipeUsers.forEach(conn => {
-      this.drawLineSegment(conn.from, conn.to);
+      this.drawLineSegment(conn.from, conn.to, true);
       const pixel = this.map.latLngToLayerPoint(L.latLng(conn.to[1], conn.to[0]));
       this.g.append('image')
         .attr('class', 'user-icon')
@@ -390,6 +500,11 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         .attr('width', 20)
         .attr('height', 20);
     });
+
+    // Отрисовка пунктирной линии от последней вершины до курсора
+    if (this.tempLine) {
+      this.drawLineSegment(this.tempLine.from, this.tempLine.to, true);
+    }
 
     this.updateObjectPositions();
   }
@@ -407,19 +522,16 @@ export class MapComponent implements AfterViewInit, OnDestroy {
       };
       window.addEventListener('click', handler);
     });
-    console.log(`showContextMenu: type=${type}, data.id=${data.id}, position=(${this.contextMenuPosition.x}, ${this.contextMenuPosition.y})`);
   }
 
   onPassportClosed(id: number) {
     this.passports = this.passports.filter(p => p.id !== id);
-    console.log(`onPassportClosed: Removed passport id=${id}, passports=`, this.passports);
   }
 
   onDelete() {
     if (!this.contextTarget) return;
     const { type, data } = this.contextTarget;
 
-    console.log('onDelete: Deleting:', type, 'id=', data.id);
     if (type === 'well') {
       this.objectService.deleteWell(data.id);
       this.passports = this.passports.filter(p => !(p.type === 'well' && p.data.id === data.id));
@@ -432,23 +544,20 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     }
 
     this.contextMenuVisible = false;
-    console.log('onDelete: Passports after deletion:', this.passports);
   }
 
-  redrawAll(wells: Well[], pipes: Pipe[], users: User[]) {
-    console.log('redrawAll: Redrawing all objects:', { wells, pipes, users });
+  redrawAll() {
     this.g.selectAll('*').remove();
-    wells.forEach(well => {
+    this.state.wells.forEach(well => {
       if (well.visible) {
         this.addWell(well);
       }
     });
-    this.redrawAllPipes(pipes, users);
+    this.redrawAllPipes(this.state.pipes, this.state.users);
   }
 
   startPipeFromWell(point: Point) {
     if (this.selectedTool === 'pipe' && !this.isDrawingPipe) {
-      console.log('startPipeFromWell: Starting pipe at:', point);
       this.isDrawingPipe = true;
       this.currentPipe = [point];
       this.currentPipeUsers = [];
@@ -458,14 +567,181 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   }
 
   openPassport(type: 'well' | 'pipe' | 'user' | null, data: any) {
-    if (!type || !data || !data.id) {
-      console.warn('openPassport: Invalid type or data', { type, data });
-      return;
-    }
+    if (!type || !data || !data.id) return;
 
     this.passports = this.passports.filter(p => !(p.type === type && p.data.id === data.id));
     this.passports.push({ id: data.id, type, data });
     this.contextMenuVisible = false;
-    console.log(`openPassport: Added passport id=${data.id}, type=${type}, passports=`, this.passports);
+  }
+
+  onDiameterSelected(diameter: number) {
+    this.pipeDiameter = diameter;
+    this.showDiameterDialog = false;
+    this.finalizePipe();
+    this.pipeDiameterInput = null;
+  }
+
+  toggleEditMode() {
+    this.editMode = !this.editMode;
+    if (this.editMode) {
+      this.selectedTool = null;
+      this.isDrawingPipe = false;
+      this.currentPipe = [];
+      this.currentPipeUsers = [];
+      this.tempLine = null;
+      this.map.dragging.disable();
+      this.map.getContainer().style.cursor = 'pointer';
+    } else {
+      this.map.dragging.enable();
+      this.map.getContainer().style.cursor = '';
+    }
+    this.redrawAll();
+  }
+
+  startDragWell(event: MouseEvent, well: Well) {
+    event.stopPropagation();
+    this.map.dragging.disable();
+    this.dragState = { type: 'well', id: well.id };
+    this._dragActive = true;
+    window.addEventListener('mousemove', this.onDragMove);
+    window.addEventListener('mouseup', this.onDragEnd);
+    if (event.currentTarget) {
+      d3.select(event.currentTarget as SVGGElement).select('circle').attr('fill', 'lightblue');
+    }
+  }
+
+  startDragUser(event: MouseEvent, user: User) {
+    event.stopPropagation();
+    this.map.dragging.disable();
+    this.dragState = { type: 'user', id: user.id };
+    this._dragActive = true;
+    window.addEventListener('mousemove', this.onDragMove);
+    window.addEventListener('mouseup', this.onDragEnd);
+    if (event.currentTarget) {
+      d3.select(event.currentTarget as SVGImageElement).attr('opacity', 0.7);
+    }
+  }
+
+  startDragPipeVertex(event: MouseEvent, pipeId: number, vertexIndex: number) {
+    event.stopPropagation();
+    this.map.dragging.disable();
+    this.dragState = { type: 'vertex', pipeId, vertexIndex };
+    this._dragActive = true;
+    window.addEventListener('mousemove', this.onDragMove);
+    window.addEventListener('mouseup', this.onDragEnd);
+    if (event.currentTarget) {
+      d3.select(event.currentTarget as SVGRectElement).attr('fill', 'pink');
+    }
+  }
+
+  startDragPipeSegment(event: MouseEvent, pipeId: number, fromIndex: number, toIndex: number) {
+    event.stopPropagation();
+    this.map.dragging.disable();
+    const pipe = this.state.pipes.find(p => p.id === pipeId);
+    if (pipe) {
+      this.dragState = { 
+        type: 'segment', 
+        pipeId, 
+        fromIndex, 
+        toIndex, 
+        initialCenter: this.calculateSegmentCenter(pipe.vertices[fromIndex], pipe.vertices[toIndex]) 
+      };
+      this._dragActive = true;
+      window.addEventListener('mousemove', this.onDragMove);
+      window.addEventListener('mouseup', this.onDragEnd);
+      if (event.currentTarget) {
+        d3.select(event.currentTarget as SVGLineElement).attr('stroke', 'lightgray');
+      }
+    }
+  }
+
+  onDragMove = (event: MouseEvent) => {
+    if (!this.dragState || !this._dragActive) return;
+
+    const latlng = this.map.mouseEventToLatLng(event);
+    const newPos: Point = [latlng.lng, latlng.lat];
+
+    const bounds = this.map.getBounds();
+    if (latlng.lat < bounds.getSouth() || latlng.lat > bounds.getNorth() ||
+        latlng.lng < bounds.getWest() || latlng.lng > bounds.getEast()) {
+      return;
+    }
+
+    if (this.dragState.type === 'well') {
+      this.objectService.moveWell(this.dragState.id, newPos);
+      this.redrawAllPipes(this.state.pipes, this.state.users);
+    } else if (this.dragState.type === 'user') {
+      this.objectService.moveUser(this.dragState.id, newPos);
+      this.redrawAllPipes(this.state.pipes, this.state.users);
+    } else if (this.dragState.type === 'vertex') {
+      const pipe = this.state.pipes.find(p => p.id === this.dragState.pipeId);
+      if (pipe) {
+        this.objectService.movePipeVertex(this.dragState.pipeId, this.dragState.vertexIndex, newPos);
+        this.redrawAllPipes(this.state.pipes, this.state.users);
+      }
+    } else if (this.dragState.type === 'segment') {
+      const pipe = this.state.pipes.find(p => p.id === this.dragState.pipeId);
+      if (pipe) {
+        const newCenter = newPos;
+        const delta: Point = [
+          newCenter[0] - this.dragState.initialCenter[0],
+          newCenter[1] - this.dragState.initialCenter[1]
+        ];
+        this.objectService.movePipeSegment(this.dragState.pipeId, this.dragState.fromIndex, this.dragState.toIndex, delta);
+        this.dragState.initialCenter = newCenter;
+        this.redrawAllPipes(this.state.pipes, this.state.users);
+      }
+    }
+  };
+
+  onDragEnd = () => {
+    if (this._dragActive) {
+      this.g.selectAll('circle').attr('fill', 'blue');
+      this.g.selectAll('rect.pipe-temp').attr('fill', (d: Point) => {
+        const isFinalized = this.state.pipes.some(p => p.vertices.some(v => this.isSamePoint(v, d)));
+        return isFinalized ? 'red' : 'white';
+      });
+      this.g.selectAll('image.user-icon').attr('opacity', 1);
+      this.g.selectAll('line.pipe-temp-overlay').attr('stroke', 'transparent');
+
+      this._dragActive = false;
+      this.dragState = null;
+      this.map.dragging.enable();
+      window.removeEventListener('mousemove', this.onDragMove);
+      window.removeEventListener('mouseup', this.onDragEnd);
+    }
+  };
+
+  findPipeIdByVertex(point: Point): number | null {
+    for (const pipe of this.state.pipes) {
+      const idx = pipe.vertices.findIndex(v => this.isSamePoint(v, point));
+      if (idx !== -1) return pipe.id;
+    }
+    return null;
+  }
+
+  findPipeVertexIndex(point: Point, pipeId?: number): number | null {
+    const pipes = pipeId ? this.state.pipes.filter(p => p.id === pipeId) : this.state.pipes;
+    for (const pipe of pipes) {
+      const idx = pipe.vertices.findIndex(v => this.isSamePoint(v, point));
+      if (idx !== -1) return idx;
+    }
+    return null;
+  }
+
+  findPipeIdBySegment(from: Point, to: Point): number | null {
+    for (const pipe of this.state.pipes) {
+      for (let i = 1; i < pipe.vertices.length; i++) {
+        if ((this.isSamePoint(pipe.vertices[i - 1], from) && this.isSamePoint(pipe.vertices[i], to)) ||
+            (this.isSamePoint(pipe.vertices[i - 1], to) && this.isSamePoint(pipe.vertices[i], from))) {
+          return pipe.id;
+        }
+      }
+    }
+    return null;
+  }
+
+  calculateSegmentCenter(from: Point, to: Point): Point {
+    return [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
   }
 }

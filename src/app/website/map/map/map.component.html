@@ -118,6 +118,17 @@
                     </svg>
                     <div class="tooltip">Труба</div>
                 </div>
+
+                <div class="tooltip-container"
+                    (click)="toggleEditMode()"
+                    [class.active]="editMode"
+                >
+                    <svg width="25" height="25" viewBox="0 0 640 640" fill="none" xmlns="http://www.w3.org/2000/svg" >
+                        <path d="M502.07 1.65836C499.27 2.72502 495.137 4.85836 492.737 6.45836C487.137 10.325 438.47 58.5917 438.47 60.325C438.47 62.1917 577.404 200.992 579.27 200.992C580.07 200.992 592.337 189.125 606.604 174.592C636.604 144.325 638.737 141.125 639.537 124.325C639.937 115.658 639.537 112.192 637.137 105.658C634.337 98.1917 631.27 94.725 589.27 52.5917C537.804 0.858355 537.404 0.591689 518.47 0.0583554C511.137 -0.208311 505.404 0.458355 502.07 1.65836Z" fill="black"/>
+                        <path d="M232.337 265.258C125.27 372.458 57.0036 441.925 56.0703 444.325C50.0703 460.192 12.0703 572.725 6.47027 590.992C0.870271 609.125 -0.329729 614.858 0.0702714 620.458C1.13694 633.658 10.0703 640.592 24.3369 639.258C38.4703 638.058 70.8703 627.925 143.804 601.792C167.67 593.258 189.804 585.258 193.137 584.192C198.337 582.325 223.004 558.192 374.204 407.125C470.337 310.992 549.137 231.792 549.137 230.992C549.137 229.258 410.204 90.3251 408.47 90.3251C407.67 90.3251 328.47 169.125 232.337 265.258Z" fill="black"/>
+                    </svg>
+                    <div class="tooltip">Редактировать</div>
+                </div>
             </header>
             <div class="map-container">
                 <div id="map"></div>
@@ -140,6 +151,13 @@
                 [style.top.px]="contextMenuPosition.y">
                 <div (click)="openPassport(contextTarget ? contextTarget.type : null, contextTarget?.data)">Паспорт объекта</div>
                 <div (click)="onDelete()">Удалить</div>
+            </div>
+            <div *ngIf="showDiameterDialog" class="diameter-dialog">
+                <div class="dialog-content">
+                    <label for="pipe-diameter">Выберите диаметр трубы (мм):</label>
+                    <input id="pipe-diameter" type="number" min="1" [(ngModel)]="pipeDiameterInput" />
+                    <button [disabled]="!pipeDiameterInput || pipeDiameterInput <= 0" (click)="onDiameterSelected(pipeDiameterInput!)">ОК</button>
+                </div>
             </div>
         </div>
     </div>

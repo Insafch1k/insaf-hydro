@@ -60,6 +60,7 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
         { label: 'ID', value: this.objectData.id.toString() },
         { label: 'Вершины', value: this.objectData.vertices.length.toString() },
         { label: 'Потребители', value: this.objectData.userConnections.length.toString() },
+        { label: 'Диаметр', value: this.objectData.diameter ? this.objectData.diameter.toString() + ' мм' : '-' },
         { label: 'Тип', value: 'Труба' },
       ];
     } else if (this.objectType === 'user') {

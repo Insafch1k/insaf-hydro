@@ -46,6 +46,12 @@ header {
   opacity: 1;
 }
 
+.tooltip-container.active {
+  background: #e0e0e0;
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px #1976d2;
+}
+
 svg {
   cursor: pointer;
   transition: background 0.3s;
@@ -211,4 +217,8 @@ button:hover {
       filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.5)); /* Glow */
     }
   }
+}
+
+.diameter-dialog{
+  background-color: rgb(226, 234, 247);
 }
