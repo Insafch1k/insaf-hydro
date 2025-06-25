@@ -132,3 +132,53 @@
 
 
 
+
+
+.truba{
+  display: flex;
+  align-items: center;
+  padding: 4px 0;
+  cursor: pointer;
+  font-size: 14px;
+  padding-left: 15px;
+
+  img.arrow {
+    width: 10px;
+    margin-right: 5px;
+  }
+
+  img:not(.arrow) {
+    width: 15px;
+    margin-right: 5px;
+  }
+
+  label {
+    flex-grow: 1;
+    font-weight: 400;
+    margin-right: 5px;
+  }
+
+  input[type="checkbox"] {
+    cursor: pointer;
+  }
+}
+
+.sub-layers2{
+  .layer-item2{
+    padding: 4px 0;
+    padding-left: 30px;
+    label{
+      font-size: 14px;
+      font-weight: 400;
+    }
+    img.arrow {
+      width: 10px;
+      margin-right: 5px;
+    }
+  
+    img:not(.arrow) {
+      width: 15px;
+      margin-right: 5px;
+    }
+  }
+}

@@ -15,7 +15,7 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
   @ViewChild('leftColumn') leftColumn!: ElementRef<HTMLDivElement>;
 
   @Input() objectData: any;
-  @Input() objectType: 'well' | 'pipe' | 'user' | null = null;
+  @Input() objectType: 'well' | 'pipe' | 'pipe-segment' | 'user' | null = null;
   @Input() objectId: number | null = null;
   @Output() passportClosed = new EventEmitter<number>(); // Emit objectId when closed
 
@@ -62,6 +62,20 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
         { label: 'Потребители', value: this.objectData.userConnections.length.toString() },
         { label: 'Диаметр', value: this.objectData.diameter ? this.objectData.diameter.toString() + ' мм' : '-' },
         { label: 'Тип', value: 'Труба' },
+      ];
+    } else if (this.objectType === 'pipe-segment') {
+      this.objectName = `Отрезок трубы #${this.objectData.pipeId}`;
+      const from = this.objectData.from;
+      const to = this.objectData.to;
+      const fromIndex = this.objectData.fromIndex;
+      const toIndex = this.objectData.toIndex;
+      const length = this.calculateSegmentLength(from, to);
+      this.passportData = [
+        { label: 'ID трубы', value: this.objectData.pipeId.toString() },
+        { label: 'Вершина 1 (индекс)', value: `${fromIndex} [${from[0]}, ${from[1]}]` },
+        { label: 'Вершина 2 (индекс)', value: `${toIndex} [${to[0]}, ${to[1]}]` },
+        { label: 'Длина отрезка', value: length.toFixed(2) + ' (ед.)' },
+        { label: 'Тип', value: 'Отрезок трубы' },
       ];
     } else if (this.objectType === 'user') {
       this.objectName = `Потребитель #${this.objectData.id}`;
@@ -497,5 +511,12 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
     const maxVisibleRows = Math.floor(availableHeight / rowHeight);
 
     this.visiblePassportData = this.passportData.slice(0, maxVisibleRows);
+  }
+
+  private calculateSegmentLength(from: [number, number], to: [number, number]): number {
+    // Евклидова длина
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
+    return Math.sqrt(dx * dx + dy * dy);
   }
 }

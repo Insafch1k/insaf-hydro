@@ -37,7 +37,8 @@
 		  </div>
 		  <div *ngIf="isWellsOpen && wells.length > 0" class="sub-layers">
 			<div *ngFor="let well of wells" class="layer-item sub-sub-layer">
-			  <label>Скважина ({{ well.id }})</label>
+			  <label (click)="onOpenWellPassport(well)">Скважина ({{ well.id }})</label>
+			  <img src="../../../../../assets/data/icon/wrap.svg" alt="Паспорт" style="width:16px;cursor:pointer;margin-right:4px;" (click)="onOpenWellPassport(well)" />
 			  <input
 				type="checkbox"
 				[checked]="well.visible"
@@ -58,13 +59,33 @@
 			<input type="checkbox" checked (change)="toggleGroupVisibility('pipes', $event)" />
 		  </div>
 		  <div *ngIf="isPipesOpen && pipes.length > 0" class="sub-layers">
-			<div *ngFor="let pipe of pipes" class="layer-item sub-sub-layer">
-			  <label>Труба ({{ pipe.id }})</label>
-			  <input
-				type="checkbox"
-				[checked]="pipe.visible"
-				(change)="togglePipeVisibility(pipe.id, $event)"
-			  />
+			<div *ngFor="let pipe of pipes">
+			  <div class="truba">
+				<img
+				  class="arrow"
+				  [src]="openPipeIds.has(pipe.id) ? '../../../../../assets/data/icon/strelka-down.svg' : '../../../../../assets/data/icon/strelka.svg'"
+				  alt="Arrow"
+				  (click)="togglePipeSegments(pipe.id)"
+				/>
+				<label (click)="togglePipeSegments(pipe.id)">Труба ({{ pipe.id }})</label>
+				<input
+				  type="checkbox"
+				  [checked]="pipe.visible"
+				  (change)="togglePipeVisibility(pipe.id, $event)"
+				/>
+			  </div>
+			  <div *ngIf="openPipeIds.has(pipe.id)" class="sub-layers2">
+				<div *ngFor="let segment of getPipeSegments(pipe)" class="layer-item2 sub-sub-layer2" (click)="onOpenPipeSegmentPassport(segment)">
+				  <label>Отрезок {{ segment.fromIndex }}-{{ segment.toIndex }}</label>
+				  <img src="../../../../../assets/data/icon/wrap.svg" alt="Паспорт" style="width:16px;cursor:pointer;margin-right:4px;" />
+				  <input
+					type="checkbox"
+					[checked]="segment.visible"
+					(click)="$event.stopPropagation()"
+					(change)="toggleSegmentVisibility(segment, $event)"
+				  />
+				</div>
+			  </div>
 			</div>
 		  </div>
   
@@ -81,7 +102,8 @@
 		  </div>
 		  <div *ngIf="isUsersOpen && users.length > 0" class="sub-layers">
 			<div *ngFor="let user of users" class="layer-item sub-sub-layer">
-			  <label>Потребитель ({{ user.id }})</label>
+			  <label (click)="onOpenUserPassport(user)">Потребитель ({{ user.id }})</label>
+			  <img src="../../../../../assets/data/icon/wrap.svg" alt="Паспорт" style="width:16px;cursor:pointer;margin-right:4px;" (click)="onOpenUserPassport(user)" />
 			  <input
 				type="checkbox"
 				[checked]="user.visible"

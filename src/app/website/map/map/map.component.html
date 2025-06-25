@@ -6,7 +6,7 @@
         <app-map-menu></app-map-menu>
     </nav>
     <div class="map-top">
-        <app-left-header class="left-head" [mainMap]="map"></app-left-header>
+        <app-left-header class="left-head" [mainMap]="map" (openPassportRequested)="openPassport($event.type, $event.data)"></app-left-header>
         <div class="container">
             <header>
                 <div class="tooltip-container" (click)="zoomIn()">

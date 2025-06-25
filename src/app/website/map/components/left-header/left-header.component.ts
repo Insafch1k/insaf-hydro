@@ -1,4 +1,4 @@
-import { Component, AfterViewInit, Input, SimpleChanges, OnChanges, OnDestroy } from '@angular/core';
+import { Component, AfterViewInit, Input, SimpleChanges, OnChanges, OnDestroy, Output, EventEmitter } from '@angular/core';
 import * as L from 'leaflet';
 import { Subscription } from 'rxjs';
 import { ObjectService, Well, Pipe, User } from '../../services/object.service';
@@ -20,6 +20,9 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
   isPipesOpen = false;
   isUsersOpen = false;
   private subscription: Subscription;
+  @Output() openPassportRequested = new EventEmitter<{ type: 'well' | 'pipe' | 'user' | 'pipe-segment', data: any }>();
+  openPipeIds: Set<number> = new Set();
+  segmentVisibility: Map<string, boolean> = new Map();
 
   constructor(private objectService: ObjectService) {
     this.subscription = this.objectService.getState().subscribe(state => {
@@ -43,10 +46,13 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
     } else {
       console.warn('ngAfterViewInit: mainMap ещё не доступен');
     }
+    // Глобально отменяем дефолтное контекстное меню браузера
+    document.addEventListener('contextmenu', this.preventContextMenu, true);
   }
 
   ngOnDestroy() {
     this.subscription.unsubscribe();
+    document.removeEventListener('contextmenu', this.preventContextMenu, true);
   }
 
   private initializeNavigator() {
@@ -126,4 +132,56 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
     const visible = (event.target as HTMLInputElement).checked;
     this.objectService.toggleGroupVisibility(type, visible);
   }
+
+  togglePipeSegments(pipeId: number) {
+    if (this.openPipeIds.has(pipeId)) {
+      this.openPipeIds.delete(pipeId);
+    } else {
+      this.openPipeIds.add(pipeId);
+    }
+  }
+
+  getPipeSegments(pipe: Pipe) {
+    const segments = [];
+    for (let i = 1; i < pipe.vertices.length; i++) {
+      const id = `${pipe.id}_${i - 1}_${i}`;
+      segments.push({
+        pipeId: pipe.id,
+        from: pipe.vertices[i - 1],
+        to: pipe.vertices[i],
+        fromIndex: i - 1,
+        toIndex: i,
+        id,
+        visible: this.segmentVisibility.get(id) ?? true
+      });
+    }
+    return segments;
+  }
+
+  toggleSegmentVisibility(segment: any, event: Event) {
+    const checked = (event.target as HTMLInputElement).checked;
+    this.segmentVisibility.set(segment.id, checked);
+    // Здесь можно добавить вызов сервиса для обновления видимости на карте, если нужно
+  }
+
+  onOpenWellPassport(well: Well) {
+    this.openPassportRequested.emit({ type: 'well', data: well });
+  }
+
+  onOpenPipePassport(pipe: Pipe) {
+    this.openPassportRequested.emit({ type: 'pipe', data: pipe });
+  }
+
+  onOpenUserPassport(user: User) {
+    this.openPassportRequested.emit({ type: 'user', data: user });
+  }
+
+  onOpenPipeSegmentPassport(segment: any) {
+    console.log('Открыть паспорт отрезка:', segment);
+    this.openPassportRequested.emit({ type: 'pipe-segment', data: segment });
+  }
+
+  private preventContextMenu = (event: MouseEvent) => {
+    event.preventDefault();
+  };
 }

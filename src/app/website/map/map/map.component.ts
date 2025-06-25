@@ -25,7 +25,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   map!: L.Map;
   private subscription: Subscription;
   private state: { wells: Well[]; pipes: Pipe[]; users: User[] } = { wells: [], pipes: [], users: [] };
-  passports: { id: number; type: 'well' | 'pipe' | 'user'; data: any }[] = [];
+  passports: { id: number; type: 'well' | 'pipe' | 'user' | 'pipe-segment'; data: any }[] = [];
   pipeDiameter: number | null = null;
   showDiameterDialog: boolean = false;
   pipeDiameterInput: number | null = null;
@@ -45,12 +45,12 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     this.map = L.map('map', {
       attributionControl: false,
       zoomControl: false
-    }).setView([55.00, 28.00], 15);
+    }).setView([55.827024, 49.132798], 15);
 
     L.tileLayer(
       'http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
       {
-        maxZoom: 20,
+        maxZoom: 19,
         subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
         attribution: ''
       }
@@ -406,11 +406,19 @@ export class MapComponent implements AfterViewInit, OnDestroy {
           }
         } else if (event.button === 2) {
           event.preventDefault();
-          const pipe = this.state.pipes.find(p => p.vertices.some((v, i) =>
-            i > 0 && this.isSamePoint(v, d[1]) && this.isSamePoint(p.vertices[i - 1], d[0])
-          ));
-          if (pipe) {
-            this.showContextMenu(event, 'pipe', pipe);
+          const pipeId = this.findPipeIdBySegment(d[0], d[1]);
+          const fromIndex = pipeId !== null ? this.findPipeVertexIndex(d[0], pipeId) : null;
+          const toIndex = pipeId !== null ? this.findPipeVertexIndex(d[1], pipeId) : null;
+          if (pipeId !== null && fromIndex !== null && toIndex !== null) {
+            // Всегда открываем паспорт отрезка
+            this.openPassport('pipe-segment', {
+              pipeId,
+              from: d[0],
+              to: d[1],
+              fromIndex,
+              toIndex,
+              id: `${pipeId}_${fromIndex}_${toIndex}`
+            });
           }
         }
       })
@@ -566,11 +574,17 @@ export class MapComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  openPassport(type: 'well' | 'pipe' | 'user' | null, data: any) {
-    if (!type || !data || !data.id) return;
+  openPassport(type: 'well' | 'pipe' | 'user' | 'pipe-segment' | null, data: any) {
+    if (!type || !data) return;
 
-    this.passports = this.passports.filter(p => !(p.type === type && p.data.id === data.id));
-    this.passports.push({ id: data.id, type, data });
+    // Для pipe-segment используем уникальный id по трубе и индексам вершин
+    let passportId = data.id;
+    if (type === 'pipe-segment' && data.pipeId !== undefined && data.fromIndex !== undefined && data.toIndex !== undefined) {
+      passportId = `${data.pipeId}_${data.fromIndex}_${data.toIndex}`;
+    }
+
+    this.passports = this.passports.filter(p => !(p.type === type && p.id === passportId));
+    this.passports.push({ id: passportId, type, data });
     this.contextMenuVisible = false;
   }
 

@@ -11,9 +11,12 @@ export class MapHeaderComponent {
     currentScheme: string = '';
 
     constructor() {
-        this.currentScheme = JSON.parse(
-            localStorage.getItem('current_scheme')!
-        ).name_scheme;
+        const schemeRaw = localStorage.getItem('current_scheme');
+        if (schemeRaw) {
+            this.currentScheme = JSON.parse(schemeRaw).name_scheme;
+        } else {
+            this.currentScheme = '';
+        }
     }
 
     onMouseEnter(index: number) {
