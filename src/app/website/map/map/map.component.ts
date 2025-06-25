@@ -1,4 +1,4 @@
-import { Component, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, AfterViewInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import * as d3 from 'd3';
 import * as L from 'leaflet';
 import { Subscription } from 'rxjs';
@@ -11,7 +11,7 @@ type Point = [number, number];
   templateUrl: './map.component.html',
   styleUrls: ['./map.component.scss']
 })
-export class MapComponent implements AfterViewInit, OnDestroy {
+export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked {
   selectedTool: 'well' | 'pipe' | null = null;
   svg: any;
   g: any;
@@ -33,6 +33,8 @@ export class MapComponent implements AfterViewInit, OnDestroy {
   private dragState: any = null;
   private _dragActive = false;
   private tempLine: { from: Point; to: Point } | null = null; // Для пунктирной линии до курсора
+  @ViewChild('diameterInput') diameterInputRef?: ElementRef<HTMLInputElement>;
+  private shouldFocusDiameterInput = false;
 
   constructor(private objectService: ObjectService) {
     this.subscription = this.objectService.getState().subscribe(state => {
@@ -273,6 +275,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         this.pipeDiameterInput = null;
         this.isDrawingPipe = false;
         this.tempLine = null;
+        this.shouldFocusDiameterInput = true;
       }
       return;
     }
@@ -757,5 +760,12 @@ export class MapComponent implements AfterViewInit, OnDestroy {
 
   calculateSegmentCenter(from: Point, to: Point): Point {
     return [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
+  }
+
+  ngAfterViewChecked() {
+    if (this.showDiameterDialog && this.shouldFocusDiameterInput && this.diameterInputRef) {
+      this.diameterInputRef.nativeElement.focus();
+      this.shouldFocusDiameterInput = false;
+    }
   }
 }

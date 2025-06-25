@@ -78,12 +78,6 @@
 				<div *ngFor="let segment of getPipeSegments(pipe)" class="layer-item2 sub-sub-layer2" (click)="onOpenPipeSegmentPassport(segment)">
 				  <label>Отрезок {{ segment.fromIndex }}-{{ segment.toIndex }}</label>
 				  <img src="../../../../../assets/data/icon/wrap.svg" alt="Паспорт" style="width:16px;cursor:pointer;margin-right:4px;" />
-				  <input
-					type="checkbox"
-					[checked]="segment.visible"
-					(click)="$event.stopPropagation()"
-					(change)="toggleSegmentVisibility(segment, $event)"
-				  />
 				</div>
 			  </div>
 			</div>
@@ -104,11 +98,6 @@
 			<div *ngFor="let user of users" class="layer-item sub-sub-layer">
 			  <label (click)="onOpenUserPassport(user)">Потребитель ({{ user.id }})</label>
 			  <img src="../../../../../assets/data/icon/wrap.svg" alt="Паспорт" style="width:16px;cursor:pointer;margin-right:4px;" (click)="onOpenUserPassport(user)" />
-			  <input
-				type="checkbox"
-				[checked]="user.visible"
-				(change)="toggleUserVisibility(user.id, $event)"
-			  />
 			</div>
 		  </div>
 		</div>
