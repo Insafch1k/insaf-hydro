@@ -1,0 +1,77 @@
+<div class="login-wrapper">
+    <form
+        class="form form-local"
+    >
+        <div>
+            <h1 class="title">Авторизация</h1>
+        </div>
+        <div class="flex flex-col select-none">
+            <label for="email">Эл. почта:</label>
+            <input
+                formControlName="email"
+                required
+                type="email"
+                placeholder="Ваш E-mail"
+                id="email"
+                class="input"
+            />
+
+            <!-- Small для ошибок email -->
+            <small
+                *ngIf="
+                    userData.controls['email'].invalid &&
+                    (userData.controls['email'].dirty ||
+                        userData.controls['email'].touched)
+                "
+                class="error"
+            >
+                <span *ngIf="userData.controls['email'].hasError('required')">
+                    e-mail является обязательным полем
+                </span>
+                <span *ngIf="userData.controls['email'].hasError('email')">
+                    Не корректный e-mail
+                </span>
+            </small>
+        </div>
+
+        <div class="flex flex-col mt-3 select-none">
+            <label for="password">Пароль:</label>
+            <input
+                formControlName="password"
+                required
+                type="password"
+                placeholder="Ваш пароль"
+                id="password"
+                class="input"
+            />
+
+            <!-- Small для ошибок password -->
+            <small
+                *ngIf="
+                    userData.controls['password'].invalid &&
+                    (userData.controls['password'].dirty ||
+                        userData.controls['password'].touched)
+                "
+                class="error"
+            >
+                <span *ngIf="userData.controls['password'].hasError('required')">
+                    Пароль является обязательным полем
+                </span>
+                <span *ngIf="userData.controls['password'].hasError('minlength')">
+                    Пароль должен быть больше 4 символов
+                </span>
+                <span *ngIf="userData.controls['password'].hasError('maxlength')">
+                    Пароль не должен превышать 20 символов
+                </span>
+            </small>
+        </div>
+        <div class="mt-5 gap-1">
+            <button
+                type="submit"
+                class="btn btn-blue"
+            >
+                Продолжить
+            </button>
+        </div>
+    </form>
+</div>

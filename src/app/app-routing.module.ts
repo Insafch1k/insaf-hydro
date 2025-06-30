@@ -21,6 +21,22 @@ const routes: Routes = [
   title: 'map',
 },
 {
+  path: 'auth',
+  loadChildren: () =>
+      import('./website/auth/auth.module').then(
+          (m) => m.AuthModule
+      ),
+  title: 'auth',
+},
+{
+  path: 'menu',
+  loadChildren: () =>
+      import('./website/modules/menu/menu.module').then(
+          (m) => m.MenuModule
+      ),
+  title: 'Меню',
+},
+{
   path: '**',
   component: MainComponent,
   redirectTo: '',

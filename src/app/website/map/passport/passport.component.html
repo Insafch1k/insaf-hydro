@@ -35,7 +35,7 @@
     </div>
   </div>
   <div class="footer-passport" *ngIf="!isMinimized">
-    <span *ngIf="!editMode" (click)="onEdit()">Изменить параметры</span>
+    <span class="save-btn" *ngIf="!editMode" (click)="onEdit()">Изменить параметры</span>
     <div *ngIf="editMode" class="edit-btns">
       <button (click)="onSave()">Сохранить</button>
       <button (click)="onCancel()">Отмена</button>
