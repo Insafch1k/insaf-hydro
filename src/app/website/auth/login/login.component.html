@@ -1,6 +1,8 @@
 <div class="login-wrapper">
     <form
         class="form form-local"
+        [formGroup]="userData"
+        (ngSubmit)="onSubmit()"
     >
         <div>
             <h1 class="title">Авторизация</h1>
@@ -74,4 +76,5 @@
             </button>
         </div>
     </form>
+    <small *ngIf="error" class="error">{{ error }}</small>
 </div>

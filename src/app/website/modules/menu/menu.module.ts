@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MenuRoutingModule } from './menu-routing.module';
 import { MenuComponent } from './menu.component';
+import { CommonModule } from '@angular/common';
 
 @NgModule({
     declarations: [MenuComponent],
@@ -9,6 +10,7 @@ import { MenuComponent } from './menu.component';
         FormsModule,
         ReactiveFormsModule,
         MenuRoutingModule,
+        CommonModule
     ],
 })
 export class MenuModule {}

@@ -1,9 +1,130 @@
 .menu-main {
     height: 100vh;
     background-color: rgba(240, 243, 248, 1);
+
+}
+
+.top-header{
+    height: 80px;
+    background-color: rgba(24, 32, 38, 1);
+    display: flex;
+    align-items: center;
+    padding: 0 80px;
+    gap: 40px;
+    p{
+        font-size: 1.125rem;
+        font-weight: 400;
+        color:rgba(255, 255, 255, 1);
+        cursor: pointer;
+    }
+}
+
+.inner{
+    padding: 0 80px;
 }
 
 .header{
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    padding-top: 40px;
+
+    .sotrudnik{
+        background-color: rgba(24, 32, 38, 1);
+        color: rgba(255, 255, 255, 1);
+        padding: 16.5px 20px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .company{
+        font-size: 48px;
+        font-weight: 700;
+        color: rgba(24, 32, 38, 1);
+        flex-grow: 1;
+        text-align: center;
+    }
+    .create-btn{
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 18px;
+        font-weight: 400;
+        background-color: rgba(37, 111, 255, 1);
+        color: rgba(255, 255, 255, 1);
+        border-radius: 12px;
+        padding: 18.5px 27.75px;
+        border: none;
+        cursor: pointer;
+    }
 }
+
+.little-header{
+    margin-top: 45px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    .search input {
+        font-size: 18px;
+        font-weight: 400;
+        color: #23292F;
+        background: none;
+        border: none;
+        outline: none;
+        width: 320px;
+        border-bottom: 1px solid rgba(24, 32, 38, 1);
+        padding-bottom: 4px;
+        margin-bottom: 16px;
+    }
+
+    .filter{
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 18px;
+        font-weight: 400;
+        cursor: pointer;
+    }
+}
+
+.main-part{
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 40px;
+    padding-top: 40px;
+
+    .one-object{
+        width: calc(20% - 32px);
+        min-width: 300px;
+        display: flex;
+        flex-direction: column;
+        text-align: left;
+        cursor: pointer;
+
+        img{
+
+            border-radius: 20px;
+        }
+
+        .object-title{
+            font-size: 16px;
+            font-weight: 700;
+            color: rgba(24, 32, 38, 1);
+            padding-top: 7px;
+            padding-bottom: 5px;
+        }
+
+        .create{
+            font-size: 14px;
+            font-weight: 400;
+            color: rgba(24, 32, 38, 1);
+            padding-top: 5px;
+        }
+    }
+}
+
+
+
