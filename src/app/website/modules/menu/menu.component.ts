@@ -1,4 +1,6 @@
 import { Component, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-menu',
@@ -7,6 +9,8 @@ import { Component, OnInit } from '@angular/core';
 })
 export class MenuComponent implements OnInit {
     objects: any[] = [];
+
+    constructor(private authService: AuthService, private router: Router) {}
 
     ngOnInit() {
         const schemes = localStorage.getItem('schemes');
@@ -23,5 +27,10 @@ export class MenuComponent implements OnInit {
             // Заглушка, если схем нет
             this.objects = [];
         }
+    }
+
+    onLogout() {
+        this.authService.logout();
+        this.router.navigate(['/auth/login']);
     }
 }

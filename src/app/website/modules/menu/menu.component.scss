@@ -17,6 +17,17 @@
         color:rgba(255, 255, 255, 1);
         cursor: pointer;
     }
+    .logout-btn {
+        color: rgba(255,255,255,0.4);
+        transition: color 0.2s;
+        cursor: pointer;
+        &:hover {
+            color: rgba(255,255,255,1);
+        }
+        &:active {
+            color: rgba(37, 111, 255, 1);
+        }
+    }
 }
 
 .inner{
