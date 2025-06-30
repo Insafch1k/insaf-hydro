@@ -74,7 +74,7 @@ label{
 /* Error styles */
 .error {
     color: red;
-    font-size: 0.875rem;
+    font-size: 1.125rem;
     margin-top: 0.5rem;
     text-align: left;
 }
@@ -92,5 +92,11 @@ label{
         font-size: 24px;
         font-weight: 700;
         cursor: pointer;
+        &:hover {
+            background-color: rgb(11, 92, 255);
+        }
+        &:active {
+            background-color: rgb(0, 53, 160);
+        }
     }
 }
