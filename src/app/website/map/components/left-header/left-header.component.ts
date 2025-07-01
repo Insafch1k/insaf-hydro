@@ -1,7 +1,7 @@
 import { Component, AfterViewInit, Input, SimpleChanges, OnChanges, OnDestroy, Output, EventEmitter } from '@angular/core';
 import * as L from 'leaflet';
 import { Subscription } from 'rxjs';
-import { ObjectService, Well, Pipe, User } from '../../services/object.service';
+import { ObjectService, Well, Pipe, User, Capture, Pump, Reservoir, Tower } from '../../services/object.service';
 
 @Component({
   selector: 'app-left-header',
@@ -15,12 +15,16 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
   wells: Well[] = [];
   pipes: Pipe[] = [];
   users: User[] = [];
+  captures: Capture[] = [];
+  pumps: Pump[] = [];
+  reservoirs: Reservoir[] = [];
+  towers: Tower[] = [];
   isObjectTypesOpen = false;
   isWellsOpen = false;
   isPipesOpen = false;
   isUsersOpen = false;
   private subscription: Subscription;
-  @Output() openPassportRequested = new EventEmitter<{ type: 'well' | 'pipe' | 'user' | 'pipe-segment', data: any }>();
+  @Output() openPassportRequested = new EventEmitter<{ type: 'well' | 'pipe' | 'user' | 'pipe-segment' | 'capture' | 'pump' | 'reservoir' | 'tower', data: any }>();
   openPipeIds: Set<number> = new Set();
   segmentVisibility: Map<string, boolean> = new Map();
 
@@ -29,6 +33,10 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
       this.wells = state.wells;
       this.pipes = state.pipes;
       this.users = state.users;
+      this.captures = state.captures;
+      this.pumps = state.pumps;
+      this.reservoirs = state.reservoirs;
+      this.towers = state.towers;
     });
   }
 
@@ -209,6 +217,66 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
     if (this.mainMap && user.position) {
       this.mainMap.flyTo([user.position[1], user.position[0]], Math.max(this.mainMap.getZoom(), 17), { animate: true });
     }
+  }
+
+  onOpenCapturePassport(obj: Capture) {
+    this.openPassportRequested.emit({ type: 'capture', data: obj });
+  }
+
+  onOpenPumpPassport(obj: Pump) {
+    this.openPassportRequested.emit({ type: 'pump', data: obj });
+  }
+
+  onOpenReservoirPassport(obj: Reservoir) {
+    this.openPassportRequested.emit({ type: 'reservoir', data: obj });
+  }
+
+  onOpenTowerPassport(obj: Tower) {
+    this.openPassportRequested.emit({ type: 'tower', data: obj });
+  }
+
+  onFlyToCapture(obj: Capture) {
+    if (this.mainMap && obj.position) {
+      this.mainMap.flyTo([obj.position[1], obj.position[0]], Math.max(this.mainMap.getZoom(), 17), { animate: true });
+    }
+  }
+
+  onFlyToPump(obj: Pump) {
+    if (this.mainMap && obj.position) {
+      this.mainMap.flyTo([obj.position[1], obj.position[0]], Math.max(this.mainMap.getZoom(), 17), { animate: true });
+    }
+  }
+
+  onFlyToReservoir(obj: Reservoir) {
+    if (this.mainMap && obj.position) {
+      this.mainMap.flyTo([obj.position[1], obj.position[0]], Math.max(this.mainMap.getZoom(), 17), { animate: true });
+    }
+  }
+
+  onFlyToTower(obj: Tower) {
+    if (this.mainMap && obj.position) {
+      this.mainMap.flyTo([obj.position[1], obj.position[0]], Math.max(this.mainMap.getZoom(), 17), { animate: true });
+    }
+  }
+
+  toggleCaptureVisibility(id: number, event: Event) {
+    const visible = (event.target as HTMLInputElement).checked;
+    this.objectService.toggleCaptureVisibility(id, visible);
+  }
+
+  togglePumpVisibility(id: number, event: Event) {
+    const visible = (event.target as HTMLInputElement).checked;
+    this.objectService.togglePumpVisibility(id, visible);
+  }
+
+  toggleReservoirVisibility(id: number, event: Event) {
+    const visible = (event.target as HTMLInputElement).checked;
+    this.objectService.toggleReservoirVisibility(id, visible);
+  }
+
+  toggleTowerVisibility(id: number, event: Event) {
+    const visible = (event.target as HTMLInputElement).checked;
+    this.objectService.toggleTowerVisibility(id, visible);
   }
 
   private preventContextMenu = (event: MouseEvent) => {

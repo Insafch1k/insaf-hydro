@@ -15,7 +15,7 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
   @ViewChild('leftColumn') leftColumn!: ElementRef<HTMLDivElement>;
 
   @Input() objectData: any;
-  @Input() objectType: 'well' | 'pipe' | 'pipe-segment' | 'user' | null = null;
+  @Input() objectType: 'well' | 'pipe' | 'pipe-segment' | 'user' | 'capture' | 'pump' | 'reservoir' | 'tower' | null = null;
   @Input() objectId: number | null = null;
   @Output() passportClosed = new EventEmitter<number>(); // Emit objectId when closed
 
@@ -130,6 +130,15 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
         'Расчетный расход воды в праздники': 'number', 'Расчетный расход воды в субботу': 'number', 'Расчётный расход воды': 'number',
         'Способ задания потребителя': 'string', 'Текущий расход воды': 'number', 'Уровень воды': 'number'
       };
+    } else if (this.objectType === 'capture' || this.objectType === 'pump' || this.objectType === 'reservoir' || this.objectType === 'tower') {
+      this.objectName = `${this.objectType} #${this.objectData.id}`;
+      this.passportData = [
+        { label: 'Тип', value: this.objectType },
+        { label: 'ID', value: this.objectData.id?.toString() || '' },
+        { label: 'Координаты', value: this.objectData.position ? this.objectData.position.join(', ') : '' },
+      ];
+      this.editableKeys = ['Тип', 'ID', 'Координаты'];
+      this.fieldTypes = { 'Тип': 'string', 'ID': 'number', 'Координаты': 'string' };
     }
     this.passportData.forEach(item => {
       this.editFields[item.label] = item.value;
@@ -612,5 +621,16 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
       'Уровень воды': 'waterLevel',
     };
     return map[label] || label;
+  }
+
+  getFields(): { label: string; value: string }[] {
+    if (this.objectType === 'capture' || this.objectType === 'pump' || this.objectType === 'reservoir' || this.objectType === 'tower') {
+      return [
+        { label: 'Тип', value: this.objectType },
+        { label: 'ID', value: this.objectData.id?.toString() || '' },
+        { label: 'Координаты', value: this.objectData.position ? this.objectData.position.join(', ') : '' },
+      ];
+    }
+    return this.passportData;
   }
 }

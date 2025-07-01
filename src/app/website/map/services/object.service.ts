@@ -21,10 +21,42 @@ export interface User {
   visible: boolean;
 }
 
+export interface Capture {
+  id: number;
+  position: [number, number];
+  visible: boolean;
+  type: 'capture';
+}
+
+export interface Pump {
+  id: number;
+  position: [number, number];
+  visible: boolean;
+  type: 'pump';
+}
+
+export interface Reservoir {
+  id: number;
+  position: [number, number];
+  visible: boolean;
+  type: 'reservoir';
+}
+
+export interface Tower {
+  id: number;
+  position: [number, number];
+  visible: boolean;
+  type: 'tower';
+}
+
 interface ObjectState {
   wells: Well[];
   pipes: Pipe[];
   users: User[];
+  captures: Capture[];
+  pumps: Pump[];
+  reservoirs: Reservoir[];
+  towers: Tower[];
 }
 
 @Injectable({
@@ -34,12 +66,20 @@ export class ObjectService {
   private state = new BehaviorSubject<ObjectState>({
     wells: [],
     pipes: [],
-    users: []
+    users: [],
+    captures: [],
+    pumps: [],
+    reservoirs: [],
+    towers: []
   });
 
   private wellIdCounter = 1;
   private pipeIdCounter = 1;
   private userIdCounter = 1;
+  private captureIdCounter = 1;
+  private pumpIdCounter = 1;
+  private reservoirIdCounter = 1;
+  private towerIdCounter = 1;
 
   getState(): Observable<ObjectState> {
     return this.state.asObservable();
@@ -77,6 +117,50 @@ export class ObjectService {
     this.state.next(currentState);
   }
 
+  addCapture(position: [number, number]) {
+    const currentState = this.state.value;
+    currentState.captures.push({
+      id: this.captureIdCounter++,
+      position,
+      visible: true,
+      type: 'capture'
+    });
+    this.state.next(currentState);
+  }
+
+  addPump(position: [number, number]) {
+    const currentState = this.state.value;
+    currentState.pumps.push({
+      id: this.pumpIdCounter++,
+      position,
+      visible: true,
+      type: 'pump'
+    });
+    this.state.next(currentState);
+  }
+
+  addReservoir(position: [number, number]) {
+    const currentState = this.state.value;
+    currentState.reservoirs.push({
+      id: this.reservoirIdCounter++,
+      position,
+      visible: true,
+      type: 'reservoir'
+    });
+    this.state.next(currentState);
+  }
+
+  addTower(position: [number, number]) {
+    const currentState = this.state.value;
+    currentState.towers.push({
+      id: this.towerIdCounter++,
+      position,
+      visible: true,
+      type: 'tower'
+    });
+    this.state.next(currentState);
+  }
+
   deleteWell(id: number) {
     const currentState = this.state.value;
     currentState.wells = currentState.wells.filter(well => well.id !== id);
@@ -92,6 +176,30 @@ export class ObjectService {
   deleteUser(id: number) {
     const currentState = this.state.value;
     currentState.users = currentState.users.filter(user => user.id !== id);
+    this.state.next(currentState);
+  }
+
+  deleteCapture(id: number) {
+    const currentState = this.state.value;
+    currentState.captures = currentState.captures.filter(o => o.id !== id);
+    this.state.next(currentState);
+  }
+
+  deletePump(id: number) {
+    const currentState = this.state.value;
+    currentState.pumps = currentState.pumps.filter(o => o.id !== id);
+    this.state.next(currentState);
+  }
+
+  deleteReservoir(id: number) {
+    const currentState = this.state.value;
+    currentState.reservoirs = currentState.reservoirs.filter(o => o.id !== id);
+    this.state.next(currentState);
+  }
+
+  deleteTower(id: number) {
+    const currentState = this.state.value;
+    currentState.towers = currentState.towers.filter(o => o.id !== id);
     this.state.next(currentState);
   }
 
@@ -120,6 +228,30 @@ export class ObjectService {
       user.visible = visible;
       this.state.next(currentState);
     }
+  }
+
+  toggleCaptureVisibility(id: number, visible: boolean) {
+    const currentState = this.state.value;
+    const obj = currentState.captures.find(o => o.id === id);
+    if (obj) { obj.visible = visible; this.state.next(currentState); }
+  }
+
+  togglePumpVisibility(id: number, visible: boolean) {
+    const currentState = this.state.value;
+    const obj = currentState.pumps.find(o => o.id === id);
+    if (obj) { obj.visible = visible; this.state.next(currentState); }
+  }
+
+  toggleReservoirVisibility(id: number, visible: boolean) {
+    const currentState = this.state.value;
+    const obj = currentState.reservoirs.find(o => o.id === id);
+    if (obj) { obj.visible = visible; this.state.next(currentState); }
+  }
+
+  toggleTowerVisibility(id: number, visible: boolean) {
+    const currentState = this.state.value;
+    const obj = currentState.towers.find(o => o.id === id);
+    if (obj) { obj.visible = visible; this.state.next(currentState); }
   }
 
   toggleGroupVisibility(type: 'wells' | 'pipes' | 'users', visible: boolean) {
@@ -239,5 +371,29 @@ export class ObjectService {
       });
       this.state.next(currentState);
     }
+  }
+
+  moveCapture(id: number, newPosition: [number, number]) {
+    const currentState = this.state.value;
+    const obj = currentState.captures.find(o => o.id === id);
+    if (obj) { obj.position = newPosition; this.state.next(currentState); }
+  }
+
+  movePump(id: number, newPosition: [number, number]) {
+    const currentState = this.state.value;
+    const obj = currentState.pumps.find(o => o.id === id);
+    if (obj) { obj.position = newPosition; this.state.next(currentState); }
+  }
+
+  moveReservoir(id: number, newPosition: [number, number]) {
+    const currentState = this.state.value;
+    const obj = currentState.reservoirs.find(o => o.id === id);
+    if (obj) { obj.position = newPosition; this.state.next(currentState); }
+  }
+
+  moveTower(id: number, newPosition: [number, number]) {
+    const currentState = this.state.value;
+    const obj = currentState.towers.find(o => o.id === id);
+    if (obj) { obj.position = newPosition; this.state.next(currentState); }
   }
 }

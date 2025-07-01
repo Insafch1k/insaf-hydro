@@ -220,6 +220,26 @@
                     <button [disabled]="!pipeDiameterInput || pipeDiameterInput <= 0" (click)="onDiameterSelected(pipeDiameterInput!)">ОК</button>
                 </div>
             </div>
+            <div *ngIf="showObjectTypeDialog" class="object-type-dialog" [style.left.px]="objectTypeDialogPosition.x" [style.top.px]="objectTypeDialogPosition.y">
+                <div class="object-type-dialog-content">
+                    <p>Выберите тип объекта:</p>
+                    <button (click)="onObjectTypeSelected('user')">
+                        <img src="assets/data/icon/user.png" width="24" height="24" /> Потребитель
+                    </button>
+                    <button (click)="onObjectTypeSelected('capture')">
+                        <img src="assets/data/images/Каптаж.png" width="24" height="24" /> Каптаж
+                    </button>
+                    <button (click)="onObjectTypeSelected('pump')">
+                        <img src="assets/data/images/Насос.png" width="24" height="24" /> Насос
+                    </button>
+                    <button (click)="onObjectTypeSelected('reservoir')">
+                        <img src="assets/data/images/контр-резервуар.png" width="24" height="24" /> Контр-резервуар
+                    </button>
+                    <button (click)="onObjectTypeSelected('tower')">
+                        <img src="assets/data/images/Водонапорная башня.png" width="24" height="24" /> Водонапорная башня
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
