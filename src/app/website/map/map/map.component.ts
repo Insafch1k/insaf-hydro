@@ -3,6 +3,8 @@ import * as d3 from 'd3';
 import * as L from 'leaflet';
 import { Subscription } from 'rxjs';
 import { ObjectService, Well, Pipe, User } from '../services/object.service';
+import { DataSchemeService } from '../services/data-scheme.service';
+import { Router } from '@angular/router';
 
 type Point = [number, number];
 
@@ -35,11 +37,14 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
   private tempLine: { from: Point; to: Point } | null = null; // Для пунктирной линии до курсора
   @ViewChild('diameterInput') diameterInputRef?: ElementRef<HTMLInputElement>;
   private shouldFocusDiameterInput = false;
+  private isMapReady = false;
 
-  constructor(private objectService: ObjectService) {
+  constructor(private objectService: ObjectService, private dataSchemeService: DataSchemeService, private router: Router) {
     this.subscription = this.objectService.getState().subscribe(state => {
       this.state = state;
-      this.redrawAll();
+      if (this.isMapReady) {
+        this.redrawAll();
+      }
     });
   }
 
@@ -125,6 +130,62 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
 
     this.updateSvgTransform();
     this.updateObjectPositions();
+
+    this.isMapReady = true;
+    this.redrawAll();
+  }
+
+  ngOnInit() {
+    const id_scheme = history.state.id_scheme;
+    if (id_scheme) {
+      this.loadSchemeById(id_scheme);
+    }
+  }
+
+  loadSchemeById(id_scheme: number) {
+    this.dataSchemeService.getSchemeData(id_scheme).subscribe({
+      next: (geojson) => {
+        // Парсим объекты и добавляем их в ObjectService
+        const wells = (geojson.features || [])
+          .filter((f: any) => f.name_object_type === 'Скважина')
+          .map((f: any) => ({
+            id: f.id,
+            position: [f.geometry.coordinates[1], f.geometry.coordinates[0]] as [number, number],
+            visible: true
+          }));
+        const users = (geojson.features || [])
+          .filter((f: any) => f.name_object_type === 'Потребитель')
+          .map((f: any) => ({
+            id: f.id,
+            position: [f.geometry.coordinates[1], f.geometry.coordinates[0]] as [number, number],
+            visible: true
+          }));
+        // Группируем отрезки труб по id и собираем их в одну трубу, если возможно
+        const pipeSegments = (geojson.features || [])
+          .filter((f: any) => f.name_object_type === 'Труба' && f.geometry.type === 'LineString');
+        // Группировка по "Имя" трубы, если оно есть, иначе по id
+        const pipesMap = new Map<string, [number, number][]>();
+        pipeSegments.forEach((seg: any) => {
+          const name = seg.properties?.Имя || String(seg.id);
+          if (!pipesMap.has(name)) pipesMap.set(name, []);
+          seg.geometry.coordinates.forEach((coord: [number, number]) => {
+            pipesMap.get(name)!.push([coord[1], coord[0]]);
+          });
+        });
+        const pipes = Array.from(pipesMap.entries()).map(([name, vertices], idx) => ({
+          id: idx + 1,
+          vertices,
+          userConnections: [],
+          visible: true,
+          diameter: 0 // Можно добавить диаметр из properties, если нужно
+        }));
+        // Очищаем старое состояние и добавляем новые объекты
+        this.objectService['state'].next({ wells, pipes, users });
+      },
+      error: (err) => {
+        console.error('Ошибка загрузки схемы:', err);
+      }
+    });
   }
 
   zoomIn() {

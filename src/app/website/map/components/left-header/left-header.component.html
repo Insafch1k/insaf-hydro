@@ -37,8 +37,7 @@
 		  </div>
 		  <div *ngIf="isWellsOpen && wells.length > 0" class="sub-layers">
 			<div *ngFor="let well of wells" class="layer-item sub-sub-layer">
-			  <label (click)="onOpenWellPassport(well)">Скважина ({{ well.id }})</label>
-			  <img src="../../../../../assets/data/icon/wrap.svg" alt="Паспорт" style="width:16px;cursor:pointer;margin-right:4px;" (click)="onOpenWellPassport(well)" />
+			  <label (click)="onFlyToWell(well)" (dblclick)="onOpenWellPassport(well)">Скважина ({{ well.id }})</label>
 			  <input
 				type="checkbox"
 				[checked]="well.visible"
@@ -67,7 +66,7 @@
 				  alt="Arrow"
 				  (click)="togglePipeSegments(pipe.id)"
 				/>
-				<label (click)="togglePipeSegments(pipe.id)">Труба ({{ pipe.id }})</label>
+				<label (click)="onFlyToPipe(pipe)" (dblclick)="onOpenPipePassport(pipe)">Труба ({{ pipe.id }})</label>
 				<input
 				  type="checkbox"
 				  [checked]="pipe.visible"
@@ -75,7 +74,7 @@
 				/>
 			  </div>
 			  <div *ngIf="openPipeIds.has(pipe.id)" class="sub-layers2">
-				<div *ngFor="let segment of getPipeSegments(pipe)" class="layer-item2 sub-sub-layer2" (click)="onOpenPipeSegmentPassport(segment)">
+				<div *ngFor="let segment of getPipeSegments(pipe)" class="layer-item2 sub-sub-layer2" (click)="onFlyToPipeSegment(segment)" (dblclick)="onOpenPipeSegmentPassport(segment)">
 				  <label>Отрезок {{ segment.fromIndex }}-{{ segment.toIndex }}</label>
 				  <img src="../../../../../assets/data/icon/wrap.svg" alt="Паспорт" style="width:16px;cursor:pointer;margin-right:4px;" />
 				</div>
@@ -96,8 +95,7 @@
 		  </div>
 		  <div *ngIf="isUsersOpen && users.length > 0" class="sub-layers">
 			<div *ngFor="let user of users" class="layer-item sub-sub-layer">
-			  <label (click)="onOpenUserPassport(user)">Потребитель ({{ user.id }})</label>
-			  <img src="../../../../../assets/data/icon/wrap.svg" alt="Паспорт" style="width:16px;cursor:pointer;margin-right:4px;" (click)="onOpenUserPassport(user)" />
+			  <label (click)="onFlyToUser(user)" (dblclick)="onOpenUserPassport(user)">Потребитель ({{ user.id }})</label>
 			</div>
 		  </div>
 		</div>

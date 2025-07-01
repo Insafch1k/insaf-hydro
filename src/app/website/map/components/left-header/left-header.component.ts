@@ -181,6 +181,36 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
     this.openPassportRequested.emit({ type: 'pipe-segment', data: segment });
   }
 
+  onFlyToWell(well: Well) {
+    if (this.mainMap && well.position) {
+      this.mainMap.flyTo([well.position[1], well.position[0]], Math.max(this.mainMap.getZoom(), 17), { animate: true });
+    }
+  }
+
+  onFlyToPipe(pipe: Pipe) {
+    if (this.mainMap && pipe.vertices && pipe.vertices.length > 0) {
+      const latlngs = pipe.vertices.map(v => [v[1], v[0]]);
+      const bounds = L.latLngBounds(latlngs as [number, number][]);
+      this.mainMap.flyToBounds(bounds, { animate: true, maxZoom: 17 });
+    }
+  }
+
+  onFlyToPipeSegment(segment: any) {
+    if (this.mainMap && segment.from && segment.to) {
+      const bounds = L.latLngBounds([
+        [segment.from[1], segment.from[0]],
+        [segment.to[1], segment.to[0]]
+      ]);
+      this.mainMap.flyToBounds(bounds, { animate: true, maxZoom: 18 });
+    }
+  }
+
+  onFlyToUser(user: User) {
+    if (this.mainMap && user.position) {
+      this.mainMap.flyTo([user.position[1], user.position[0]], Math.max(this.mainMap.getZoom(), 17), { animate: true });
+    }
+  }
+
   private preventContextMenu = (event: MouseEvent) => {
     event.preventDefault();
   };

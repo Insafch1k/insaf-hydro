@@ -33,4 +33,8 @@ export class MenuComponent implements OnInit {
         this.authService.logout();
         this.router.navigate(['/auth/login']);
     }
+
+    onSelectScheme(scheme: any) {
+        this.router.navigate(['/map'], { state: { id_scheme: scheme.id } });
+    }
 }

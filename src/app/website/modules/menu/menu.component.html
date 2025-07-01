@@ -35,7 +35,7 @@
         </div>
     
         <div class="main-part">
-            <div class="one-object" *ngFor="let obj of objects">
+            <div class="one-object" *ngFor="let obj of objects" (click)="onSelectScheme(obj)">
                 <img [src]="obj.img" alt="">
                 <p class="object-title">{{obj.title}} <span>{{obj.city}}</span></p>
                 <!-- <p class="create">Создана: {{obj.date}}</p>
