@@ -57,6 +57,7 @@ interface ObjectState {
   pumps: Pump[];
   reservoirs: Reservoir[];
   towers: Tower[];
+  deletedObjects: { type: string; id: number | string }[];
 }
 
 @Injectable({
@@ -70,7 +71,8 @@ export class ObjectService {
     captures: [],
     pumps: [],
     reservoirs: [],
-    towers: []
+    towers: [],
+    deletedObjects: [],
   });
 
   private wellIdCounter = 1;
@@ -164,43 +166,104 @@ export class ObjectService {
   deleteWell(id: number) {
     const currentState = this.state.value;
     currentState.wells = currentState.wells.filter(well => well.id !== id);
+    currentState.deletedObjects.push({ type: 'Скважина', id });
     this.state.next(currentState);
   }
 
   deletePipe(id: number) {
     const currentState = this.state.value;
     currentState.pipes = currentState.pipes.filter(pipe => pipe.id !== id);
+    currentState.deletedObjects.push({ type: 'Труба', id });
     this.state.next(currentState);
   }
 
   deleteUser(id: number) {
     const currentState = this.state.value;
     currentState.users = currentState.users.filter(user => user.id !== id);
+    currentState.deletedObjects.push({ type: 'Потребитель', id });
     this.state.next(currentState);
   }
 
   deleteCapture(id: number) {
     const currentState = this.state.value;
     currentState.captures = currentState.captures.filter(o => o.id !== id);
+    currentState.deletedObjects.push({ type: 'Каптаж', id });
     this.state.next(currentState);
   }
 
   deletePump(id: number) {
     const currentState = this.state.value;
     currentState.pumps = currentState.pumps.filter(o => o.id !== id);
+    currentState.deletedObjects.push({ type: 'Насос', id });
     this.state.next(currentState);
   }
 
   deleteReservoir(id: number) {
     const currentState = this.state.value;
     currentState.reservoirs = currentState.reservoirs.filter(o => o.id !== id);
+    currentState.deletedObjects.push({ type: 'Контр-резервуар', id });
     this.state.next(currentState);
   }
 
   deleteTower(id: number) {
     const currentState = this.state.value;
     currentState.towers = currentState.towers.filter(o => o.id !== id);
+    currentState.deletedObjects.push({ type: 'Водонапорная башня', id });
     this.state.next(currentState);
+  }
+
+  deletePipeSegment(pipeId: number, fromIndex: number, toIndex: number) {
+    const currentState = this.state.value;
+    const pipe = currentState.pipes.find(p => p.id === pipeId);
+    if (!pipe) {
+      console.error('Труба не найдена:', pipeId);
+      return;
+    }
+
+    // Проверяем, что сегмент существует (fromIndex и toIndex должны быть соседними)
+    if (fromIndex + 1 !== toIndex || fromIndex < 0 || toIndex >= pipe.vertices.length) {
+      console.error('Недопустимые индексы сегмента:', { pipeId, fromIndex, toIndex });
+      return;
+    }
+
+    const newPipes: Pipe[] = [];
+    // Разделяем трубу на две части, если сегмент не на краю
+    if (fromIndex > 0) {
+      const leftVertices = pipe.vertices.slice(0, fromIndex + 1);
+      if (leftVertices.length >= 2) {
+        newPipes.push({
+          id: this.pipeIdCounter++,
+          vertices: leftVertices,
+          userConnections: pipe.userConnections.filter(conn =>
+            leftVertices.some(v => this.isSamePoint(v, conn.from) || this.isSamePoint(v, conn.to))),
+          visible: true,
+          diameter: pipe.diameter
+        });
+      }
+    }
+    if (toIndex < pipe.vertices.length - 1) {
+      const rightVertices = pipe.vertices.slice(toIndex);
+      if (rightVertices.length >= 2) {
+        newPipes.push({
+          id: this.pipeIdCounter++,
+          vertices: rightVertices,
+          userConnections: pipe.userConnections.filter(conn =>
+            rightVertices.some(v => this.isSamePoint(v, conn.from) || this.isSamePoint(v, conn.to))),
+          visible: true,
+          diameter: pipe.diameter
+        });
+      }
+    }
+
+    // Удаляем оригинальную трубу и добавляем новые
+    this.state.next({
+      ...currentState,
+      pipes: [
+        ...currentState.pipes.filter(p => p.id !== pipeId),
+        ...newPipes
+      ],
+      deletedObjects: [...currentState.deletedObjects, { type: 'Труба', id: pipeId }]
+    });
   }
 
   toggleWellVisibility(id: number, visible: boolean) {
@@ -233,25 +296,37 @@ export class ObjectService {
   toggleCaptureVisibility(id: number, visible: boolean) {
     const currentState = this.state.value;
     const obj = currentState.captures.find(o => o.id === id);
-    if (obj) { obj.visible = visible; this.state.next(currentState); }
+    if (obj) {
+      obj.visible = visible;
+      this.state.next(currentState);
+    }
   }
 
   togglePumpVisibility(id: number, visible: boolean) {
     const currentState = this.state.value;
     const obj = currentState.pumps.find(o => o.id === id);
-    if (obj) { obj.visible = visible; this.state.next(currentState); }
+    if (obj) {
+      obj.visible = visible;
+      this.state.next(currentState);
+    }
   }
 
   toggleReservoirVisibility(id: number, visible: boolean) {
     const currentState = this.state.value;
     const obj = currentState.reservoirs.find(o => o.id === id);
-    if (obj) { obj.visible = visible; this.state.next(currentState); }
+    if (obj) {
+      obj.visible = visible;
+      this.state.next(currentState);
+    }
   }
 
   toggleTowerVisibility(id: number, visible: boolean) {
     const currentState = this.state.value;
     const obj = currentState.towers.find(o => o.id === id);
-    if (obj) { obj.visible = visible; this.state.next(currentState); }
+    if (obj) {
+      obj.visible = visible;
+      this.state.next(currentState);
+    }
   }
 
   toggleGroupVisibility(type: 'wells' | 'pipes' | 'users', visible: boolean) {
@@ -271,18 +346,17 @@ export class ObjectService {
     const well = currentState.wells.find(w => w.id === id);
     if (well) {
       const oldPosition = well.position;
-      // Перемещаем связанные вершины труб
       currentState.pipes.forEach(pipe => {
         pipe.vertices.forEach((v, i) => {
-          if (v[0] === oldPosition[0] && v[1] === oldPosition[1]) {
+          if (this.isSamePoint(v, oldPosition)) {
             pipe.vertices[i] = newPosition;
           }
         });
         pipe.userConnections.forEach(conn => {
-          if (conn.from[0] === oldPosition[0] && conn.from[1] === oldPosition[1]) {
+          if (this.isSamePoint(conn.from, oldPosition)) {
             conn.from = newPosition;
           }
-          if (conn.to[0] === oldPosition[0] && conn.to[1] === oldPosition[1]) {
+          if (this.isSamePoint(conn.to, oldPosition)) {
             conn.to = newPosition;
           }
         });
@@ -297,15 +371,14 @@ export class ObjectService {
     const user = currentState.users.find(u => u.id === id);
     if (user) {
       const oldPosition = user.position;
-      // Перемещаем связанные userConnections и вершины труб
       currentState.pipes.forEach(pipe => {
         pipe.userConnections.forEach(conn => {
-          if (conn.to[0] === oldPosition[0] && conn.to[1] === oldPosition[1]) {
+          if (this.isSamePoint(conn.to, oldPosition)) {
             conn.to = newPosition;
           }
         });
         pipe.vertices.forEach((v, i) => {
-          if (v[0] === oldPosition[0] && v[1] === oldPosition[1]) {
+          if (this.isSamePoint(v, oldPosition)) {
             pipe.vertices[i] = newPosition;
           }
         });
@@ -319,13 +392,13 @@ export class ObjectService {
     const currentState = this.state.value;
     const pipe = currentState.pipes.find(p => p.id === pipeId);
     if (pipe && pipe.vertices[vertexIndex]) {
+      const oldPosition = pipe.vertices[vertexIndex];
       pipe.vertices[vertexIndex] = newPosition;
-      // Перемещаем userConnections если совпадает
       pipe.userConnections.forEach(conn => {
-        if (conn.from[0] === pipe.vertices[vertexIndex][0] && conn.from[1] === pipe.vertices[vertexIndex][1]) {
+        if (this.isSamePoint(conn.from, oldPosition)) {
           conn.from = newPosition;
         }
-        if (conn.to[0] === pipe.vertices[vertexIndex][0] && conn.to[1] === pipe.vertices[vertexIndex][1]) {
+        if (this.isSamePoint(conn.to, oldPosition)) {
           conn.to = newPosition;
         }
       });
@@ -341,31 +414,21 @@ export class ObjectService {
       const oldTo = pipe.vertices[toIndex];
       pipe.vertices[fromIndex] = [oldFrom[0] + delta[0], oldFrom[1] + delta[1]];
       pipe.vertices[toIndex] = [oldTo[0] + delta[0], oldTo[1] + delta[1]];
-      // Перемещаем userConnections если совпадает
       pipe.userConnections.forEach(conn => {
-        if ((conn.from[0] === oldFrom[0] && conn.from[1] === oldFrom[1]) ||
-            (conn.from[0] === oldTo[0] && conn.from[1] === oldTo[1])) {
+        if (this.isSamePoint(conn.from, oldFrom) || this.isSamePoint(conn.from, oldTo)) {
           conn.from = [conn.from[0] + delta[0], conn.from[1] + delta[1]];
         }
-        if ((conn.to[0] === oldFrom[0] && conn.to[1] === oldFrom[1]) ||
-            (conn.to[0] === oldTo[0] && conn.to[1] === oldTo[1])) {
+        if (this.isSamePoint(conn.to, oldFrom) || this.isSamePoint(conn.to, oldTo)) {
           conn.to = [conn.to[0] + delta[0], conn.to[1] + delta[1]];
         }
       });
-      // Если в одной из вершин есть скважина или потребитель — двигаем и их
       currentState.wells.forEach(well => {
-        if ((well.position[0] === oldFrom[0] && well.position[1] === oldFrom[1])) {
-          well.position = [well.position[0] + delta[0], well.position[1] + delta[1]];
-        }
-        if ((well.position[0] === oldTo[0] && well.position[1] === oldTo[1])) {
+        if (this.isSamePoint(well.position, oldFrom) || this.isSamePoint(well.position, oldTo)) {
           well.position = [well.position[0] + delta[0], well.position[1] + delta[1]];
         }
       });
       currentState.users.forEach(user => {
-        if ((user.position[0] === oldFrom[0] && user.position[1] === oldFrom[1])) {
-          user.position = [user.position[0] + delta[0], user.position[1] + delta[1]];
-        }
-        if ((user.position[0] === oldTo[0] && user.position[1] === oldTo[1])) {
+        if (this.isSamePoint(user.position, oldFrom) || this.isSamePoint(user.position, oldTo)) {
           user.position = [user.position[0] + delta[0], user.position[1] + delta[1]];
         }
       });
@@ -376,24 +439,51 @@ export class ObjectService {
   moveCapture(id: number, newPosition: [number, number]) {
     const currentState = this.state.value;
     const obj = currentState.captures.find(o => o.id === id);
-    if (obj) { obj.position = newPosition; this.state.next(currentState); }
+    if (obj) {
+      obj.position = newPosition;
+      this.state.next(currentState);
+    }
   }
 
   movePump(id: number, newPosition: [number, number]) {
     const currentState = this.state.value;
     const obj = currentState.pumps.find(o => o.id === id);
-    if (obj) { obj.position = newPosition; this.state.next(currentState); }
+    if (obj) {
+      obj.position = newPosition;
+      this.state.next(currentState);
+    }
   }
 
   moveReservoir(id: number, newPosition: [number, number]) {
     const currentState = this.state.value;
     const obj = currentState.reservoirs.find(o => o.id === id);
-    if (obj) { obj.position = newPosition; this.state.next(currentState); }
+    if (obj) {
+      obj.position = newPosition;
+      this.state.next(currentState);
+    }
   }
 
   moveTower(id: number, newPosition: [number, number]) {
     const currentState = this.state.value;
     const obj = currentState.towers.find(o => o.id === id);
-    if (obj) { obj.position = newPosition; this.state.next(currentState); }
+    if (obj) {
+      obj.position = newPosition;
+      this.state.next(currentState);
+    }
+  }
+
+  getDeletedObjects(): { type: string; id: number | string }[] {
+    return this.state.value.deletedObjects;
+  }
+
+  clearDeletedObjects() {
+    const currentState = this.state.value;
+    currentState.deletedObjects = [];
+    this.state.next(currentState);
+  }
+
+  private isSamePoint(a: [number, number], b: [number, number]): boolean {
+    const distance = Math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2);
+    return distance < 0.0001;
   }
 }

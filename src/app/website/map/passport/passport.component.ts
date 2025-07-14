@@ -160,6 +160,7 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
 
     document.addEventListener('click', this.handleDocumentClick);
   }
+  
 
   ngOnDestroy() {
     document.removeEventListener('click', this.handleDocumentClick);

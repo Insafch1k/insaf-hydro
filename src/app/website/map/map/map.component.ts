@@ -23,32 +23,53 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
   currentPipeUsers: { from: Point; to: Point }[] = [];
   contextMenuVisible = false;
   contextMenuPosition = { x: 0, y: 0 };
-  contextTarget: { type: 'well' | 'user' | 'pipe' | 'capture' | 'pump' | 'reservoir' | 'tower'; data: any } | null = null;
+  contextTarget: { type: 'well' | 'user' | 'pipe' | 'pipe-segment' | 'capture' | 'pump' | 'reservoir' | 'tower'; data: any } | null = null;
   map!: L.Map;
   private subscription: Subscription;
-  private state: { wells: Well[]; pipes: Pipe[]; users: User[]; captures: any[]; pumps: any[]; reservoirs: any[]; towers: any[] } = { wells: [], pipes: [], users: [], captures: [], pumps: [], reservoirs: [], towers: [] };
-  passports: { id: number; type: 'well' | 'pipe' | 'user' | 'pipe-segment' | 'capture' | 'pump' | 'reservoir' | 'tower'; data: any }[] = [];
+  private state: { wells: Well[]; pipes: Pipe[]; users: User[]; captures: any[]; pumps: any[]; reservoirs: any[]; towers: any[]; deletedObjects: { type: string; id: number | string }[] } = {
+    wells: [],
+    pipes: [],
+    users: [],
+    captures: [],
+    pumps: [],
+    reservoirs: [],
+    towers: [],
+    deletedObjects: []
+  };
+  passports: { id: number | string; type: 'well' | 'pipe' | 'user' | 'pipe-segment' | 'capture' | 'pump' | 'reservoir' | 'tower'; data: any }[] = [];
   pipeDiameter: number | null = null;
   showDiameterDialog: boolean = false;
   pipeDiameterInput: number | null = null;
   editMode: boolean = false;
   private dragState: any = null;
   private _dragActive = false;
-  private tempLine: { from: Point; to: Point } | null = null; // Для пунктирной линии до курсора
+  private tempLine: { from: Point; to: Point } | null = null;
   @ViewChild('diameterInput') diameterInputRef?: ElementRef<HTMLInputElement>;
   private shouldFocusDiameterInput = false;
   private isMapReady = false;
   showObjectTypeDialog: boolean = false;
   objectTypeDialogPosition: { x: number; y: number } = { x: 0, y: 0 };
   objectTypeDialogPoint: Point | null = null;
+  private id_scheme: number | null = null;
 
-  constructor(private objectService: ObjectService, private dataSchemeService: DataSchemeService, private router: Router) {
+  constructor(
+    private objectService: ObjectService,
+    private dataSchemeService: DataSchemeService,
+    private router: Router
+  ) {
     this.subscription = this.objectService.getState().subscribe(state => {
       this.state = state as any;
       if (this.isMapReady) {
         this.redrawAll();
       }
     });
+  }
+
+  ngOnInit() {
+    this.id_scheme = history.state.id_scheme;
+    if (this.id_scheme) {
+      this.loadSchemeById(this.id_scheme);
+    }
   }
 
   ngAfterViewInit() {
@@ -106,7 +127,6 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
         const newCenter = this.map.containerPointToLatLng(newPixelCenter);
         this.map.panTo(newCenter, { animate: false });
       } else if (this.isDrawingPipe && this.currentPipe.length >= 1) {
-        // Обновляем пунктирную линию до курсора
         const latlng = this.map.mouseEventToLatLng(e);
         this.tempLine = { from: this.currentPipe[this.currentPipe.length - 1], to: [latlng.lng, latlng.lat] };
         this.redrawAllPipes(this.state.pipes, this.state.users);
@@ -121,7 +141,10 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
     });
 
     this.map.on('click', (e: L.LeafletMouseEvent) => {
-      if (!this.selectedTool || this.editMode) return;
+      if (!this.selectedTool || this.editMode) {
+        this.contextMenuVisible = false;
+        return;
+      }
       const point: Point = [e.latlng.lng, e.latlng.lat];
       this.handleClickOnMap(e.originalEvent, point);
     });
@@ -138,17 +161,26 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
     this.redrawAll();
   }
 
-  ngOnInit() {
-    const id_scheme = history.state.id_scheme;
-    if (id_scheme) {
-      this.loadSchemeById(id_scheme);
+  ngAfterViewChecked() {
+    if (this.showDiameterDialog && this.shouldFocusDiameterInput && this.diameterInputRef) {
+      this.diameterInputRef.nativeElement.focus();
+      this.shouldFocusDiameterInput = false;
     }
+  }
+
+  ngOnDestroy() {
+    this.subscription.unsubscribe();
+    if (this.map) {
+      this.map.off('click');
+      this.map.off('moveend zoomend');
+    }
+    window.removeEventListener('mousemove', this.onDragMove);
+    window.removeEventListener('mouseup', this.onDragEnd);
   }
 
   loadSchemeById(id_scheme: number) {
     this.dataSchemeService.getSchemeData(id_scheme).subscribe({
       next: (geojson) => {
-        // Парсим объекты и добавляем их в ObjectService
         const wells = (geojson.features || [])
           .filter((f: any) => f.name_object_type === 'Скважина')
           .map((f: any) => ({
@@ -163,27 +195,35 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
             position: [f.geometry.coordinates[1], f.geometry.coordinates[0]] as [number, number],
             visible: true
           }));
-        // Группируем отрезки труб по id и собираем их в одну трубу, если возможно
         const pipeSegments = (geojson.features || [])
           .filter((f: any) => f.name_object_type === 'Труба' && f.geometry.type === 'LineString');
-        // Группировка по "Имя" трубы, если оно есть, иначе по id
-        const pipesMap = new Map<string, [number, number][]>();
+        const pipesMap = new Map<string, { vertices: [number, number][]; diameter: number }>();
         pipeSegments.forEach((seg: any) => {
           const name = seg.properties?.Имя || String(seg.id);
-          if (!pipesMap.has(name)) pipesMap.set(name, []);
+          if (!pipesMap.has(name)) {
+            pipesMap.set(name, { vertices: [], diameter: seg.properties?.diameter || 0 });
+          }
           seg.geometry.coordinates.forEach((coord: [number, number]) => {
-            pipesMap.get(name)!.push([coord[1], coord[0]]);
+            pipesMap.get(name)!.vertices.push([coord[1], coord[0]]);
           });
         });
-        const pipes = Array.from(pipesMap.entries()).map(([name, vertices], idx) => ({
+        const pipes = Array.from(pipesMap.entries()).map(([name, data], idx) => ({
           id: idx + 1,
-          vertices,
+          vertices: data.vertices,
           userConnections: [],
           visible: true,
-          diameter: 0 // Можно добавить диаметр из properties, если нужно
+          diameter: data.diameter
         }));
-        // Очищаем старое состояние и добавляем новые объекты
-        this.objectService['state'].next({ wells, pipes, users, captures: [], pumps: [], reservoirs: [], towers: [] });
+        this.objectService['state'].next({
+          wells,
+          pipes,
+          users,
+          captures: [],
+          pumps: [],
+          reservoirs: [],
+          towers: [],
+          deletedObjects: []
+        });
       },
       error: (err) => {
         console.error('Ошибка загрузки схемы:', err);
@@ -197,16 +237,6 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
 
   zoomOut() {
     this.map.zoomOut();
-  }
-
-  ngOnDestroy() {
-    this.subscription.unsubscribe();
-    if (this.map) {
-      this.map.off('click');
-      this.map.off('moveend zoomend');
-    }
-    window.removeEventListener('mousemove', this.onDragMove);
-    window.removeEventListener('mouseup', this.onDragEnd);
   }
 
   updateSvgTransform() {
@@ -238,14 +268,14 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
 
     this.g.selectAll('image.user-icon').attr('x', (d: User) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0])).x - 10)
       .attr('y', (d: User) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0])).y - 10);
-    this.g.selectAll('image.capture-icon').attr('x', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0])).x - 12)
-      .attr('y', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0])).y - 12);
-    this.g.selectAll('image.pump-icon').attr('x', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0])).x - 12)
-      .attr('y', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0])).y - 12);
-    this.g.selectAll('image.reservoir-icon').attr('x', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0])).x - 12)
-      .attr('y', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0])).y - 12);
-    this.g.selectAll('image.tower-icon').attr('x', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0])).x - 12)
-      .attr('y', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0])).y - 12);
+    this.g.selectAll('image.capture-icon').attr('x', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).x - 12)
+      .attr('y', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).y - 12);
+    this.g.selectAll('image.pump-icon').attr('x', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).x - 12)
+      .attr('y', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).y - 12);
+    this.g.selectAll('image.reservoir-icon').attr('x', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).x - 12)
+      .attr('y', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).y - 12);
+    this.g.selectAll('image.tower-icon').attr('x', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).x - 12)
+      .attr('y', (d: any) => this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).y - 12);
   }
 
   selectTool(tool: 'well' | 'pipe') {
@@ -382,10 +412,8 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
     const lastPoint = this.currentPipe[lastIndex];
 
     if (this.isSamePoint(point, lastPoint) && this.currentPipe.length > 1) {
-      // Открываем диалог выбора типа объекта
       this.showObjectTypeDialog = true;
       this.objectTypeDialogPoint = point;
-      // Позиция диалога — по последнему клику мыши (можно доработать)
       this.objectTypeDialogPosition = { x: window.event ? (window.event as MouseEvent).clientX : 0, y: window.event ? (window.event as MouseEvent).clientY : 0 };
       return;
     }
@@ -453,7 +481,7 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
       .attr('stroke', 'blue')
       .attr('stroke-width', 2)
       .attr('pointer-events', 'none');
-    
+
     if (isDashed) {
       line.attr('stroke-dasharray', '5,5');
     }
@@ -465,13 +493,11 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
       .attr('stroke-width', 15)
       .attr('pointer-events', 'all')
       .on('mousedown', (event: MouseEvent, d: [Point, Point]) => {
-        // Проверка: если мышь над вершиной — не начинать drag&drop отрезка
         const mouse = this.map.mouseEventToLatLng(event);
         const mousePoint: Point = [mouse.lng, mouse.lat];
         const distToFrom = this.isSamePoint(mousePoint, d[0]);
         const distToTo = this.isSamePoint(mousePoint, d[1]);
         if (distToFrom || distToTo) {
-          // Не начинаем drag&drop отрезка, если мышь над вершиной
           return;
         }
         if (this.editMode && event.button === 0) {
@@ -489,8 +515,7 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
           const fromIndex = pipeId !== null ? this.findPipeVertexIndex(d[0], pipeId) : null;
           const toIndex = pipeId !== null ? this.findPipeVertexIndex(d[1], pipeId) : null;
           if (pipeId !== null && fromIndex !== null && toIndex !== null) {
-            // Всегда открываем паспорт отрезка
-            this.openPassport('pipe-segment', {
+            this.showContextMenu(event, 'pipe-segment', {
               pipeId,
               from: d[0],
               to: d[1],
@@ -517,7 +542,6 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
   redrawAllPipes(pipes: Pipe[], users: User[]) {
     this.g.selectAll('.pipe-temp, .pipe-temp-overlay, .pipe-temp-dash, .user-icon, .capture-icon, .pump-icon, .reservoir-icon, .tower-icon').remove();
 
-    // Сначала рисуем все линии труб
     pipes.forEach(pipe => {
       if (!pipe.visible) return;
       pipe.vertices.forEach((pt, i) => {
@@ -530,7 +554,6 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
       });
     });
 
-    // Затем рисуем вершины труб (поверх линий)
     pipes.forEach(pipe => {
       if (!pipe.visible) return;
       pipe.vertices.forEach((pt) => {
@@ -538,7 +561,6 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
       });
     });
 
-    // Отрисовка пользователей
     users.forEach(user => {
       if (!user.visible) return;
       const pixel = this.map.latLngToLayerPoint(L.latLng(user.position[1], user.position[0]));
@@ -573,7 +595,6 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
         });
     });
 
-    // Отрисовка текущей трубы (пунктирные линии)
     this.currentPipe.forEach((pt, i) => {
       if (i > 0) {
         this.drawLineSegment(this.currentPipe[i - 1], pt, true);
@@ -583,7 +604,6 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
       this.drawPipeVertex(pt, false);
     });
 
-    // Отрисовка текущих соединений пользователей (пунктирные линии)
     this.currentPipeUsers.forEach(conn => {
       this.drawLineSegment(conn.from, conn.to, true);
       const pixel = this.map.latLngToLayerPoint(L.latLng(conn.to[1], conn.to[0]));
@@ -597,12 +617,10 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
         .attr('height', 20);
     });
 
-    // Отрисовка пунктирной линии от последней вершины до курсора
     if (this.tempLine) {
       this.drawLineSegment(this.tempLine.from, this.tempLine.to, true);
     }
 
-    // Отрисовка capture
     (this.state.captures || []).forEach((obj: any) => {
       if (!obj.visible) return;
       const pixel = this.map.latLngToLayerPoint(L.latLng(obj.position[1], obj.position[0]));
@@ -626,7 +644,7 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
           }
         });
     });
-    // Отрисовка pump
+
     (this.state.pumps || []).forEach((obj: any) => {
       if (!obj.visible) return;
       const pixel = this.map.latLngToLayerPoint(L.latLng(obj.position[1], obj.position[0]));
@@ -650,7 +668,7 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
           }
         });
     });
-    // Отрисовка reservoir
+
     (this.state.reservoirs || []).forEach((obj: any) => {
       if (!obj.visible) return;
       const pixel = this.map.latLngToLayerPoint(L.latLng(obj.position[1], obj.position[0]));
@@ -674,7 +692,7 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
           }
         });
     });
-    // Отрисовка tower
+
     (this.state.towers || []).forEach((obj: any) => {
       if (!obj.visible) return;
       const pixel = this.map.latLngToLayerPoint(L.latLng(obj.position[1], obj.position[0]));
@@ -702,7 +720,7 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
     this.updateObjectPositions();
   }
 
-  showContextMenu(event: MouseEvent, type: 'well' | 'user' | 'pipe' | 'capture' | 'pump' | 'reservoir' | 'tower', data: any) {
+  showContextMenu(event: MouseEvent, type: 'well' | 'user' | 'pipe' | 'pipe-segment' | 'capture' | 'pump' | 'reservoir' | 'tower', data: any) {
     event.preventDefault();
     this.contextMenuVisible = true;
     this.contextMenuPosition = { x: event.clientX, y: event.clientY };
@@ -717,7 +735,30 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
     });
   }
 
-  onPassportClosed(id: number) {
+  openPassport(type: 'well' | 'pipe' | 'user' | 'pipe-segment' | 'capture' | 'pump' | 'reservoir' | 'tower' | null, data: any) {
+    if (!type || !data) return;
+  
+    let passportId: number | string = data.id;
+    if (type === 'pipe-segment' && data.pipeId !== undefined && data.fromIndex !== undefined && data.toIndex !== undefined) {
+      passportId = `${data.pipeId}_${data.fromIndex}_${data.toIndex}`;
+    }
+  
+    // Преобразуем passportId в число, если это возможно
+    const numericId = typeof passportId === 'string' ? parseInt(passportId, 10) : passportId;
+  
+    this.passports = this.passports.filter(p => !(p.type === type && p.id === passportId));
+    this.passports.push({ id: numericId, type, data });
+    this.contextMenuVisible = false;
+    this.contextTarget = null;
+  }
+  convertToNumber(value: any): number | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    return typeof value === 'string' ? parseInt(value, 10) : value;
+  }
+
+  onPassportClosed(id: number | string) {
     this.passports = this.passports.filter(p => p.id !== id);
   }
 
@@ -734,6 +775,9 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
     } else if (type === 'pipe') {
       this.objectService.deletePipe(data.id);
       this.passports = this.passports.filter(p => !(p.type === 'pipe' && p.data.id === data.id));
+    } else if (type === 'pipe-segment') {
+      this.objectService.deletePipeSegment(data.pipeId, data.fromIndex, data.toIndex);
+      this.passports = this.passports.filter(p => !(p.type === 'pipe-segment' && p.id === `${data.pipeId}_${data.fromIndex}_${data.toIndex}`));
     } else if (type === 'capture') {
       this.objectService.deleteCapture(data.id);
       this.passports = this.passports.filter(p => !(p.type === 'capture' && p.data.id === data.id));
@@ -748,7 +792,9 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
       this.passports = this.passports.filter(p => !(p.type === 'tower' && p.data.id === data.id));
     }
 
+    this.redrawAll();
     this.contextMenuVisible = false;
+    this.contextTarget = null;
   }
 
   redrawAll() {
@@ -769,20 +815,6 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
       this.drawPipeVertex(point, false);
       this.skipNextSamePointCheck = true;
     }
-  }
-
-  openPassport(type: 'well' | 'pipe' | 'user' | 'pipe-segment' | 'capture' | 'pump' | 'reservoir' | 'tower' | null, data: any) {
-    if (!type || !data) return;
-
-    // Для pipe-segment используем уникальный id по трубе и индексам вершин
-    let passportId = data.id;
-    if (type === 'pipe-segment' && data.pipeId !== undefined && data.fromIndex !== undefined && data.toIndex !== undefined) {
-      passportId = `${data.pipeId}_${data.fromIndex}_${data.toIndex}`;
-    }
-
-    this.passports = this.passports.filter(p => !(p.type === type && p.id === passportId));
-    this.passports.push({ id: passportId, type, data });
-    this.contextMenuVisible = false;
   }
 
   onDiameterSelected(diameter: number) {
@@ -850,12 +882,12 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
     this.map.dragging.disable();
     const pipe = this.state.pipes.find(p => p.id === pipeId);
     if (pipe) {
-      this.dragState = { 
-        type: 'segment', 
-        pipeId, 
-        fromIndex, 
-        toIndex, 
-        initialCenter: this.calculateSegmentCenter(pipe.vertices[fromIndex], pipe.vertices[toIndex]) 
+      this.dragState = {
+        type: 'segment',
+        pipeId,
+        fromIndex,
+        toIndex,
+        initialCenter: this.calculateSegmentCenter(pipe.vertices[fromIndex], pipe.vertices[toIndex])
       };
       this._dragActive = true;
       window.addEventListener('mousemove', this.onDragMove);
@@ -968,13 +1000,6 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
     return [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
   }
 
-  ngAfterViewChecked() {
-    if (this.showDiameterDialog && this.shouldFocusDiameterInput && this.diameterInputRef) {
-      this.diameterInputRef.nativeElement.focus();
-      this.shouldFocusDiameterInput = false;
-    }
-  }
-
   onObjectTypeSelected(type: 'user' | 'capture' | 'pump' | 'reservoir' | 'tower') {
     if (!this.objectTypeDialogPoint) return;
     const point = this.objectTypeDialogPoint;
@@ -989,7 +1014,6 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
     } else if (type === 'tower') {
       this.objectService.addTower(point);
     }
-    // Добавляем соединение для текущей трубы, если нужно (только для user)
     if (type === 'user' && this.currentPipe.length > 1) {
       this.currentPipeUsers.push({ from: this.currentPipe[this.currentPipe.length - 2], to: point });
     }
@@ -1009,4 +1033,32 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
       d3.select(event.currentTarget as SVGImageElement).attr('opacity', 0.7);
     }
   }
+
+  saveAll() {
+    if (!this.id_scheme) {
+      console.error('id_scheme не определён');
+      return;
+    }
+  
+    const deletedObjects = this.objectService.getDeletedObjects().map(obj => ({
+      type: obj.type,
+      id: typeof obj.id === 'string' ? parseInt(obj.id, 10) : obj.id
+    }));
+  
+    if (deletedObjects.length === 0) {
+      console.log('Нет объектов для удаления');
+      return;
+    }
+  
+    this.dataSchemeService.deleteObjects(deletedObjects, this.id_scheme).subscribe({
+      next: (response) => {
+        console.log('Удалённые объекты успешно отправлены на сервер:', response);
+        this.objectService.clearDeletedObjects();
+      },
+      error: (err) => {
+        console.error('Ошибка при отправке удалённых объектов:', err);
+      }
+    });
+  }
+  
 }

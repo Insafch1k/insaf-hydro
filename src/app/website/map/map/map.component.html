@@ -190,7 +190,7 @@
                     <div class="tooltip">Водонапорная башня</div>
                 </div>
 
-                <button class="save-btn">Сохранить всё</button>
+                <button class="save-btn" (click)="saveAll()">Сохранить всё</button>
                 
             </header>
             <div class="map-container">
@@ -200,10 +200,10 @@
                         <app-passport
                             [objectType]="passport.type"
                             [objectData]="passport.data"
-                            [objectId]="passport.id"
+                            [objectId]="convertToNumber(passport.id)"
                             (passportClosed)="onPassportClosed($event)"
                         ></app-passport>
-                    </div>
+                      </div>
                 </div>
             </div>
           
@@ -212,7 +212,9 @@
                 *ngIf="contextMenuVisible" 
                 [style.left.px]="contextMenuPosition.x" 
                 [style.top.px]="contextMenuPosition.y">
-                <div (click)="openPassport(contextTarget ? contextTarget.type : null, contextTarget?.data)">Паспорт объекта</div>
+                <div (click)="openPassport(contextTarget ? contextTarget.type : null, contextTarget?.data)">
+                    Паспорт объекта
+                  </div>
                 <div (click)="onDelete()">Удалить</div>
             </div>
             <div *ngIf="showDiameterDialog" class="diameter-dialog">

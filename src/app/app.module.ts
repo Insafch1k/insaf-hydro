@@ -8,6 +8,7 @@ import { MainComponent } from './website/shared/pages/main/main.component';
 import { HeaderComponent } from './website/shared/layout/header/header.component';
 import { AboutModule } from './website/modules/about/about.module';
 
+
 @NgModule({
   declarations: [
     AppComponent,
