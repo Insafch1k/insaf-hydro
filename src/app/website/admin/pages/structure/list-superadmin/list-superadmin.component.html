@@ -1,0 +1,47 @@
+<div>
+    <div class="add-structure">
+        <p>Добавить организацию</p>
+        <svg
+            width="17"
+            height="17"
+            viewBox="0 0 17 17"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+        >
+            <path
+                d="M15.7857 7.28571H9.71429V1.21429C9.71429 0.543677 9.17061 0 8.5 0C7.82944 0 7.28571 0.543677 7.28571 1.21429V7.28571H1.21429C0.543677 7.28571 0 7.82944 0 8.5C0 9.17061 0.543677 9.71429 1.21429 9.71429H7.28571V15.7857C7.28571 16.4563 7.82944 17 8.5 17C9.17061 17 9.71429 16.4563 9.71429 15.7857V9.71429H15.7857C16.4563 9.71429 17 9.17061 17 8.5C17 7.82944 16.4563 7.28571 15.7857 7.28571Z"
+                fill="#256FFF"
+            />
+        </svg>
+    </div>
+
+    <div class="for-scroll p-for-hover">
+        <ng-container *ngFor="let org of struct; let i = index">
+            <div class="mt-2">
+                <div
+                    class="org-content"
+                    [ngClass]="isOpenStruct[i] ? 'open-blue name-field' : ''"
+                    (click)="confirmation(i)"
+                >
+                    <p>{{ org.structure_name }}</p>
+                    <div>
+                        <fa-icon
+                            *ngIf="!isOpenStruct[i]"
+                            [icon]="downIcon"
+                        ></fa-icon>
+                        <fa-icon
+                            *ngIf="isOpenStruct[i]"
+                            [icon]="upIcon"
+                        ></fa-icon>
+                    </div>
+                </div>
+                <div *ngIf="isOpenStruct[i]" class="org-list">
+                    <app-list-admin
+                        [organization]="org"
+                        [role]="role"
+                    ></app-list-admin>
+                </div>
+            </div>
+        </ng-container>
+    </div>
+</div>

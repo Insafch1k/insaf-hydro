@@ -1,0 +1,33 @@
+.sub-content {
+    background-color: #ffffff;
+    border-radius: 0 0 12px 12px;
+    padding: 5px 35px 20px 35px;
+}
+
+div.sub-unit {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px solid #182026;
+    margin-top: 5px;
+    cursor: pointer;
+}
+
+.sub-for-hover {
+    &:hover {
+        background-color: #cecece;
+        padding: 0 5px;
+        transform: scale(1.01);
+        border-radius: 5px;
+    }
+}
+
+.sub-hover {
+    &:hover {
+        transform: scale(1.02);
+    }
+}
+
+.subdivision-h {
+    max-height: 55vh;
+    padding-top: 20px;
+}

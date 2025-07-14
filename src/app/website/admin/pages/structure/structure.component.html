@@ -1,0 +1,33 @@
+<div>
+    <div class="struct-top">
+        <h1>Структурный список</h1>
+        <div class="search-placeholder">Поиск (заглушка)</div>
+    </div>
+
+    <div class="list-wrapper">
+        <ng-container
+            *ngIf="
+                userRole === 'moderator' &&
+                (adminService.subdivision$ | async) as subdivision
+            "
+        >
+            <div class="list-moderator-placeholder">Список модераторов (заглушка)</div>
+        </ng-container>
+        <ng-container
+            *ngIf="
+                userRole === 'admin' &&
+                (adminService.organization$ | async) as organization
+            "
+        >
+            <div class="list-admin-placeholder">Список админов (заглушка)</div>
+        </ng-container>
+        <ng-container
+            *ngIf="
+                userRole === 'superadmin' &&
+                (adminService.structure$ | async) as struct
+            "
+        >
+            <div class="list-superadmin-placeholder">Список суперадминов (заглушка)</div>
+        </ng-container>
+    </div>
+</div>

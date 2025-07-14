@@ -13,6 +13,7 @@ import { AboutModule } from './website/modules/about/about.module';
     AppComponent,
     MainComponent,
     HeaderComponent,
+
   ],
   imports: [
     BrowserModule,
