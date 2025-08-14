@@ -82,6 +82,15 @@ export class ObjectService {
   private pumpIdCounter = 1;
   private reservoirIdCounter = 1;
   private towerIdCounter = 1;
+  private createdObjects: { type: string, data: any }[] = [];
+
+  getCreatedObjects() {
+    return this.createdObjects;
+  }
+
+  clearCreatedObjects() {
+    this.createdObjects = [];
+  }
 
   getState(): Observable<ObjectState> {
     return this.state.asObservable();
@@ -89,80 +98,96 @@ export class ObjectService {
 
   addWell(position: [number, number]) {
     const currentState = this.state.value;
-    currentState.wells.push({
+    const newWell = {
       id: this.wellIdCounter++,
       position,
       visible: true
-    });
+    };
+    currentState.wells.push(newWell);
+    this.createdObjects.push({ type: 'Скважина', data: newWell });
     this.state.next(currentState);
   }
 
   addPipe(vertices: [number, number][], userConnections: { from: [number, number]; to: [number, number] }[], diameter: number) {
     const currentState = this.state.value;
-    currentState.pipes.push({
+    const newPipe = {
       id: this.pipeIdCounter++,
       vertices,
       userConnections,
       visible: true,
       diameter
-    });
+    };
+    currentState.pipes.push(newPipe);
+    this.createdObjects.push({ type: 'Труба', data: newPipe });
     this.state.next(currentState);
   }
 
   addUser(position: [number, number]) {
     const currentState = this.state.value;
-    currentState.users.push({
+    const newUser = {
       id: this.userIdCounter++,
       position,
       visible: true
-    });
+    };
+    currentState.users.push(newUser);
+    this.createdObjects.push({ type: 'Потребитель', data: newUser });
     this.state.next(currentState);
   }
 
   addCapture(position: [number, number]) {
     const currentState = this.state.value;
-    currentState.captures.push({
+    const newCapture: Capture = {
       id: this.captureIdCounter++,
       position,
       visible: true,
       type: 'capture'
-    });
+    };
+    currentState.captures.push(newCapture);
+    this.createdObjects.push({ type: 'Каптаж', data: newCapture });
     this.state.next(currentState);
   }
+  
 
   addPump(position: [number, number]) {
     const currentState = this.state.value;
-    currentState.pumps.push({
+    const newPump: Pump = {
       id: this.pumpIdCounter++,
       position,
       visible: true,
       type: 'pump'
-    });
+    };
+    currentState.pumps.push(newPump);
+    this.createdObjects.push({ type: 'Насос', data: newPump });
     this.state.next(currentState);
   }
+  
 
   addReservoir(position: [number, number]) {
     const currentState = this.state.value;
-    currentState.reservoirs.push({
+    const newReservoir: Reservoir = {
       id: this.reservoirIdCounter++,
       position,
       visible: true,
       type: 'reservoir'
-    });
+    };
+    currentState.reservoirs.push(newReservoir);
+    this.createdObjects.push({ type: 'Контр-резервуар', data: newReservoir });
     this.state.next(currentState);
   }
+  
 
   addTower(position: [number, number]) {
     const currentState = this.state.value;
-    currentState.towers.push({
+    const newTower: Tower = {
       id: this.towerIdCounter++,
       position,
       visible: true,
       type: 'tower'
-    });
+    };
+    currentState.towers.push(newTower);
+    this.createdObjects.push({ type: 'Водонапорная башня', data: newTower });
     this.state.next(currentState);
   }
-
   deleteWell(id: number) {
     const currentState = this.state.value;
     currentState.wells = currentState.wells.filter(well => well.id !== id);
@@ -219,13 +244,13 @@ export class ObjectService {
       console.error('Труба не найдена:', pipeId);
       return;
     }
-
+  
     // Проверяем, что сегмент существует (fromIndex и toIndex должны быть соседними)
     if (fromIndex + 1 !== toIndex || fromIndex < 0 || toIndex >= pipe.vertices.length) {
       console.error('Недопустимые индексы сегмента:', { pipeId, fromIndex, toIndex });
       return;
     }
-
+  
     const newPipes: Pipe[] = [];
     // Разделяем трубу на две части, если сегмент не на краю
     if (fromIndex > 0) {
@@ -254,7 +279,7 @@ export class ObjectService {
         });
       }
     }
-
+  
     // Удаляем оригинальную трубу и добавляем новые
     this.state.next({
       ...currentState,
@@ -265,6 +290,7 @@ export class ObjectService {
       deletedObjects: [...currentState.deletedObjects, { type: 'Труба', id: pipeId }]
     });
   }
+  
 
   toggleWellVisibility(id: number, visible: boolean) {
     const currentState = this.state.value;

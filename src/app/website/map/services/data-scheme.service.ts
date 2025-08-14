@@ -42,4 +42,14 @@ export class DataSchemeService {
       })
     );
   }
+
+  createObjects(payload: any): Observable<any> {
+    return this.http.post('http://api.zgidro.ru/api/map/create_object', payload).pipe(
+      catchError(err => {
+        console.error('Ошибка при отправке созданных объектов:', err);
+        return throwError(() => new Error('Ошибка при отправке созданных объектов'));
+      })
+    );
+  }
+  
 }

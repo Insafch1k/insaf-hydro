@@ -1034,31 +1034,190 @@ export class MapComponent implements AfterViewInit, OnDestroy, AfterViewChecked 
     }
   }
 
+  
+
   saveAll() {
     if (!this.id_scheme) {
       console.error('id_scheme не определён');
       return;
     }
   
+    // 1) Отправляем удалённые объекты (как есть)
     const deletedObjects = this.objectService.getDeletedObjects().map(obj => ({
       type: obj.type,
       id: typeof obj.id === 'string' ? parseInt(obj.id, 10) : obj.id
     }));
   
-    if (deletedObjects.length === 0) {
+    if (deletedObjects.length > 0) {
+      this.dataSchemeService.deleteObjects(deletedObjects, this.id_scheme).subscribe({
+        next: (response) => {
+          console.log('Удалённые объекты успешно отправлены на сервер:', response);
+          this.objectService.clearDeletedObjects();
+        },
+        error: (err) => {
+          console.error('Ошибка при отправке удалённых объектов:', err);
+        }
+      });
+    } else {
       console.log('Нет объектов для удаления');
-      return;
     }
   
-    this.dataSchemeService.deleteObjects(deletedObjects, this.id_scheme).subscribe({
-      next: (response) => {
-        console.log('Удалённые объекты успешно отправлены на сервер:', response);
-        this.objectService.clearDeletedObjects();
-      },
-      error: (err) => {
-        console.error('Ошибка при отправке удалённых объектов:', err);
-      }
+    // 2) Готовим созданные объекты
+    const currentState = this.objectService['state'].value; // берём напрямую, т.к. BehaviorSubject
+    const features: any[] = [];
+  
+    // Скважины
+    currentState.wells.forEach(well => {
+      features.push({
+        type: 'Feature',
+        id: well.id,
+        name_object_type: 'Скважина',
+        geometry: {
+          type: 'Point',
+          coordinates: [well.position[0], well.position[1]]
+        },
+        properties: {}
+      });
     });
-  }
+  
+    // Пользователи
+    currentState.users.forEach(user => {
+      features.push({
+        type: 'Feature',
+        id: user.id,
+        name_object_type: 'Потребитель',
+        geometry: {
+          type: 'Point',
+          coordinates: [user.position[0], user.position[1]]
+        },
+        properties: {}
+      });
+    });
+  
+    // Каптажи
+    currentState.captures.forEach(obj => {
+      features.push({
+        type: 'Feature',
+        id: obj.id,
+        name_object_type: 'Каптаж',
+        geometry: {
+          type: 'Point',
+          coordinates: [obj.position[0], obj.position[1]]
+        },
+        properties: {}
+      });
+    });
+  
+    // Насосы
+    currentState.pumps.forEach(obj => {
+      features.push({
+        type: 'Feature',
+        id: obj.id,
+        name_object_type: 'Насос',
+        geometry: {
+          type: 'Point',
+          coordinates: [obj.position[0], obj.position[1]]
+        },
+        properties: {}
+      });
+    });
+  
+    // Контр-резервуары
+    currentState.reservoirs.forEach(obj => {
+      features.push({
+        type: 'Feature',
+        id: obj.id,
+        name_object_type: 'Контр-резервуар',
+        geometry: {
+          type: 'Point',
+          coordinates: [obj.position[0], obj.position[1]]
+        },
+        properties: {}
+      });
+    });
+  
+    // Водонапорные башни
+    currentState.towers.forEach(obj => {
+      features.push({
+        type: 'Feature',
+        id: obj.id,
+        name_object_type: 'Водонапорная башня',
+        geometry: {
+          type: 'Point',
+          coordinates: [obj.position[0], obj.position[1]]
+        },
+        properties: {}
+      });
+    });
+  
+    // Трубы
+    currentState.pipes.forEach(pipe => {
+      features.push({
+        type: 'Feature',
+        id: pipe.id,
+        name_object_type: 'Труба',
+        geometry: {
+          type: 'LineString',
+          coordinates: pipe.vertices.map(v => [v[0], v[1]])
+        },
+        properties: {
+          diameter: pipe.diameter
+        }
+      });
+    });
+  
+    const createdObjects = this.objectService.getCreatedObjects();
+
+if (createdObjects.length === 0) {
+  console.log('Нет новых объектов для создания.');
+} else {
+  const features = createdObjects.map(obj => {
+    const { type, data } = obj;
+    let geometry: any = null;
+    let properties: any = {};
+
+    if (type === 'Труба') {
+      geometry = {
+        type: 'LineString',
+        coordinates: data.vertices.map((v: [number, number]) => [v[0], v[1]])
+      };
+      properties = { diameter: data.diameter };
+    } else {
+      geometry = {
+        type: 'Point',
+        coordinates: [data.position[0], data.position[1]]
+      };
+      properties = { Имя: `${type} #${data.id}` }; // Можно указать имя
+    }
+
+    return {
+      type: 'Feature',
+      id: data.id,
+      name_object_type: type,
+      geometry,
+      properties
+    };
+  });
+
+  const payload = {
+    data: {
+      type: 'FeatureCollection',
+      id_scheme: this.id_scheme,
+      features
+    }
+  };
+
+  this.dataSchemeService.createObjects(payload).subscribe({
+    next: (res) => {
+      console.log('Новые объекты успешно отправлены', res);
+      this.objectService.clearCreatedObjects();
+    },
+    error: (err) => {
+      console.error('Ошибка при отправке новых объектов:', err);
+    }
+  });
+}}
+
+  
   
 }
