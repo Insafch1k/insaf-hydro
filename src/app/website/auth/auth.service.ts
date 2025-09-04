@@ -1,10 +1,10 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { API_URL } from '../../core/constants/constant';
+import { API_URL } from '../constants/constant';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class AuthService {
   constructor(private http: HttpClient) {}
@@ -16,4 +16,4 @@ export class AuthService {
   logout(): void {
     localStorage.removeItem('token');
   }
-} 
+}

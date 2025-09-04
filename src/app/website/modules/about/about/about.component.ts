@@ -8,7 +8,7 @@ type Point = [number, number];
 @Component({
   selector: 'app-about',
   templateUrl: './about.component.html',
-  styleUrls: ['./about.component.scss']
+  styleUrls: ['./about.component.scss'],
 })
 export class AboutComponent implements AfterViewInit {
   selectedTool: 'well' | 'pipe' | null = null;
@@ -19,13 +19,16 @@ export class AboutComponent implements AfterViewInit {
   isDrawingPipe = false;
   skipNextSamePointCheck = false;
 
-  pipes: { vertices: Point[], userConnections: { from: Point, to: Point }[] }[] = [];
+  pipes: {
+    vertices: Point[];
+    userConnections: { from: Point; to: Point }[];
+  }[] = [];
   currentPipe: Point[] = [];
-  currentPipeUsers: { from: Point, to: Point }[] = [];
+  currentPipeUsers: { from: Point; to: Point }[] = [];
 
   contextMenuVisible = false;
   contextMenuPosition = { x: 0, y: 0 };
-  contextTarget: { type: 'well' | 'user' | 'pipe', data: any } | null = null;
+  contextTarget: { type: 'well' | 'user' | 'pipe'; data: any } | null = null;
 
   map!: L.Map;
   svgLayer!: d3.Selection<SVGSVGElement, unknown, null, undefined>;
@@ -33,30 +36,33 @@ export class AboutComponent implements AfterViewInit {
   ngAfterViewInit() {
     // Инициализация карты
     this.map = L.map('map').setView([55.751244, 37.618423], 13); // Москва по умолчанию
-  
+
     // Добавляем спутниковый слой (например, Esri World Imagery)
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-      maxZoom: 18,
-    }).addTo(this.map);
-  
+    L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      {
+        attribution:
+          'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+        maxZoom: 18,
+      }
+    ).addTo(this.map);
+
     // Создаем SVG слой на карте
     L.svg().addTo(this.map);
-  
+
     // Получаем SVG через D3
     this.svg = d3.select(this.map.getPanes().overlayPane).select('svg');
-  
+
     // Вешаем обработчик клика
     this.svg.on('click', (event: any) => {
       const coords = this.map.mouseEventToLatLng(event);
       const point: Point = [coords.lng, coords.lat];
       this.handleClickOnMap(event, point);
     });
-  
+
     // Перерисовать всё при движении карты
     this.map.on('move', () => this.redrawAll());
   }
-  
 
   selectTool(tool: 'well' | 'pipe') {
     if (this.selectedTool === tool) {
@@ -92,7 +98,8 @@ export class AboutComponent implements AfterViewInit {
     const wellSize = 30;
     const radius = wellSize / 2;
 
-    const group = this.svg.append('g')
+    const group = this.svg
+      .append('g')
       .attr('class', 'well')
       .attr('transform', `translate(${point[0]}, ${point[1]})`)
       .on('click', (event: MouseEvent) => {
@@ -103,11 +110,10 @@ export class AboutComponent implements AfterViewInit {
         this.showContextMenu(event, 'well', point);
       });
 
-    group.append('circle')
-      .attr('r', radius)
-      .attr('fill', 'blue');
+    group.append('circle').attr('r', radius).attr('fill', 'blue');
 
-    group.append('image')
+    group
+      .append('image')
       .attr('xlink:href', 'assets/data/icon/well2.png')
       .attr('x', -radius)
       .attr('y', -radius)
@@ -146,7 +152,7 @@ export class AboutComponent implements AfterViewInit {
 
     this.pipes.push({
       vertices: [...this.currentPipe],
-      userConnections: [...this.currentPipeUsers]
+      userConnections: [...this.currentPipeUsers],
     });
 
     this.currentPipe = [];
@@ -164,7 +170,8 @@ export class AboutComponent implements AfterViewInit {
     if (this.isSamePoint(point, lastPoint) && this.currentPipe.length > 1) {
       this.users.push(point);
 
-      this.svg.append('image')
+      this.svg
+        .append('image')
         .attr('xlink:href', 'assets/data/icon/user.png')
         .attr('x', point[0] - 10)
         .attr('y', point[1] - 10)
@@ -176,7 +183,7 @@ export class AboutComponent implements AfterViewInit {
 
       this.currentPipeUsers.push({
         from: this.currentPipe[this.currentPipe.length - 2],
-        to: point
+        to: point,
       });
 
       this.currentPipe.pop();
@@ -191,7 +198,8 @@ export class AboutComponent implements AfterViewInit {
   drawPipeVertex(point: Point, finalized: boolean) {
     const size = 10;
 
-    this.svg.append('rect')
+    this.svg
+      .append('rect')
       .attr('class', 'pipe-temp')
       .attr('x', point[0] - size / 2)
       .attr('y', point[1] - size / 2)
@@ -208,7 +216,8 @@ export class AboutComponent implements AfterViewInit {
   }
 
   drawLineSegment(from: Point, to: Point) {
-    this.svg.append('line')
+    this.svg
+      .append('line')
       .attr('class', 'pipe-temp')
       .attr('x1', from[0])
       .attr('y1', from[1])
@@ -221,7 +230,7 @@ export class AboutComponent implements AfterViewInit {
   redrawAllPipes() {
     this.svg.selectAll('.pipe-temp').remove();
 
-    this.pipes.forEach(pipe => {
+    this.pipes.forEach((pipe) => {
       pipe.vertices.forEach((pt, i) => {
         this.drawPipeVertex(pt, true);
         if (i > 0) {
@@ -229,9 +238,10 @@ export class AboutComponent implements AfterViewInit {
         }
       });
 
-      pipe.userConnections.forEach(conn => {
+      pipe.userConnections.forEach((conn) => {
         this.drawLineSegment(conn.from, conn.to);
-        this.svg.append('image')
+        this.svg
+          .append('image')
           .attr('xlink:href', 'assets/data/icon/user.png')
           .attr('x', conn.to[0] - 10)
           .attr('y', conn.to[1] - 10)
@@ -243,13 +253,15 @@ export class AboutComponent implements AfterViewInit {
       });
 
       // contextmenu на трубе
-      const group = this.svg.append('g')
+      const group = this.svg
+        .append('g')
         .attr('class', 'pipe')
         .on('contextmenu', (event: MouseEvent) => {
           this.showContextMenu(event, 'pipe', pipe);
         });
 
-      group.append('path')
+      group
+        .append('path')
         .attr('d', d3.line<Point>()(pipe.vertices)!)
         .attr('fill', 'none')
         .attr('stroke', 'transparent') // сделаем кликабельной
@@ -263,9 +275,10 @@ export class AboutComponent implements AfterViewInit {
       }
     });
 
-    this.currentPipeUsers.forEach(conn => {
+    this.currentPipeUsers.forEach((conn) => {
       this.drawLineSegment(conn.from, conn.to);
-      this.svg.append('image')
+      this.svg
+        .append('image')
         .attr('xlink:href', 'assets/data/icon/user.png')
         .attr('x', conn.to[0] - 10)
         .attr('y', conn.to[1] - 10)
@@ -274,7 +287,11 @@ export class AboutComponent implements AfterViewInit {
     });
   }
 
-  showContextMenu(event: MouseEvent, type: 'well' | 'user' | 'pipe', data: any) {
+  showContextMenu(
+    event: MouseEvent,
+    type: 'well' | 'user' | 'pipe',
+    data: any
+  ) {
     event.preventDefault();
     this.contextMenuVisible = true;
     this.contextMenuPosition = { x: event.clientX, y: event.clientY };
@@ -294,14 +311,16 @@ export class AboutComponent implements AfterViewInit {
     const { type, data } = this.contextTarget;
 
     if (type === 'well') {
-      this.wells = this.wells.filter(w => !this.isSamePoint(w, data));
+      this.wells = this.wells.filter((w) => !this.isSamePoint(w, data));
     } else if (type === 'user') {
-      this.users = this.users.filter(u => !this.isSamePoint(u, data));
-      this.pipes.forEach(p => {
-        p.userConnections = p.userConnections.filter(conn => !this.isSamePoint(conn.to, data));
+      this.users = this.users.filter((u) => !this.isSamePoint(u, data));
+      this.pipes.forEach((p) => {
+        p.userConnections = p.userConnections.filter(
+          (conn) => !this.isSamePoint(conn.to, data)
+        );
       });
     } else if (type === 'pipe') {
-      this.pipes = this.pipes.filter(p => p !== data);
+      this.pipes = this.pipes.filter((p) => p !== data);
     }
 
     this.contextMenuVisible = false;
@@ -310,20 +329,19 @@ export class AboutComponent implements AfterViewInit {
 
   redrawAll() {
     this.svg.selectAll('*').remove();
-    this.wells.forEach(well => this.addWell(well));
+    this.wells.forEach((well) => this.addWell(well));
     this.redrawAllPipes();
   }
 
   handleClickOnMap(event: MouseEvent, point: Point) {
     if (this.selectedTool === 'pipe' && !this.isDrawingPipe) return;
-  
+
     if (this.selectedTool === 'pipe' && this.isDrawingPipe) {
       this.handlePipeClick(point);
     }
-  
+
     if (this.selectedTool === 'well') {
       this.addWell(point);
     }
   }
-  
 }

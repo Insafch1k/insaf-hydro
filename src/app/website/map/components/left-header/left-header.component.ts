@@ -1,17 +1,43 @@
-import { Component, AfterViewInit, Input, SimpleChanges, OnChanges, OnDestroy, Output, EventEmitter } from '@angular/core';
+import {
+  Component,
+  AfterViewInit,
+  Input,
+  SimpleChanges,
+  OnChanges,
+  OnDestroy,
+  Output,
+  EventEmitter,
+} from '@angular/core';
 import * as L from 'leaflet';
 import { Subscription } from 'rxjs';
-import { ObjectService, Well, Pipe, User, Capture, Pump, Reservoir, Tower } from '../../services/object.service';
+import {
+  ObjectService,
+  Well,
+  Pipe,
+  User,
+  Capture,
+  Pump,
+  Reservoir,
+  Tower,
+} from '../../services/object.service';
+
+// Это Angular-компонент LeftHeaderComponent, который работает с картой Leaflet.
+// Он отображает список объектов (скважины, трубы, пользователи, насосы и т. д.),
+// позволяет включать/выключать их видимость, открывать «паспорта» объектов (детальную инфу), а также «перелетать» к объектам на карте.
+// Также он создаёт дополнительную маленькую карту-навигатор, синхронизированную с основной картой.
 
 @Component({
   selector: 'app-left-header',
   templateUrl: './left-header.component.html',
-  styleUrls: ['./left-header.component.scss']
+  styleUrls: ['./left-header.component.scss'],
 })
-export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy {
-  @Input() mainMap!: L.Map;
-  private navigatorMap!: L.Map;
+export class LeftHeaderComponent
+  implements AfterViewInit, OnChanges, OnDestroy
+{
+  @Input() mainMap!: L.Map; // Основная карта, передаётся извне
+  private navigatorMap!: L.Map; // Мини-карта навигатор
   private isInitialized = false;
+
   wells: Well[] = [];
   pipes: Pipe[] = [];
   users: User[] = [];
@@ -19,17 +45,32 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
   pumps: Pump[] = [];
   reservoirs: Reservoir[] = [];
   towers: Tower[] = [];
+
+  // Состояния меню (открыто/закрыто)
   isObjectTypesOpen = false;
   isWellsOpen = false;
   isPipesOpen = false;
   isUsersOpen = false;
   private subscription: Subscription;
-  @Output() openPassportRequested = new EventEmitter<{ type: 'well' | 'pipe' | 'user' | 'pipe-segment' | 'capture' | 'pump' | 'reservoir' | 'tower', data: any }>();
+
+  @Output() openPassportRequested = new EventEmitter<{
+    type:
+      | 'well'
+      | 'pipe'
+      | 'user'
+      | 'pipe-segment'
+      | 'capture'
+      | 'pump'
+      | 'reservoir'
+      | 'tower';
+    data: any;
+  }>(); // Событие для открытия паспорта объекта
+
   openPipeIds: Set<number> = new Set();
   segmentVisibility: Map<string, boolean> = new Map();
 
   constructor(private objectService: ObjectService) {
-    this.subscription = this.objectService.getState().subscribe(state => {
+    this.subscription = this.objectService.getState().subscribe((state) => {
       this.wells = state.wells;
       this.pipes = state.pipes;
       this.users = state.users;
@@ -41,6 +82,7 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
   }
 
   ngOnChanges(changes: SimpleChanges) {
+    // Если появилась основная карта, инициализируем мини-карту
     if (changes['mainMap'] && this.mainMap && !this.isInitialized) {
       console.log('ngOnChanges: mainMap получен:', this.mainMap);
       this.initializeNavigator();
@@ -59,11 +101,13 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
   }
 
   ngOnDestroy() {
+    // Отписываемся и убираем обработчики при удалении компонента
     this.subscription.unsubscribe();
     document.removeEventListener('contextmenu', this.preventContextMenu, true);
   }
 
   private initializeNavigator() {
+    // Создание мини-карты и синхронизация с основной
     if (this.isInitialized) return;
     this.isInitialized = true;
 
@@ -75,16 +119,13 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
       doubleClickZoom: false,
       boxZoom: false,
       touchZoom: false,
-      attributionControl: false
+      attributionControl: false,
     }).setView([55.81773887844533, 49.12457564650256], 10);
 
-    L.tileLayer(
-      'http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-      {
-        maxZoom: 20,
-        subdomains: ['mt0', 'mt1', 'mt2', 'mt3']
-      }
-    ).addTo(this.navigatorMap);
+    L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+      maxZoom: 20,
+      subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+    }).addTo(this.navigatorMap);
 
     if (this.mainMap) {
       console.log('Привязка событий move и zoomend');
@@ -105,6 +146,7 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
     }
   }
 
+  // --- Методы для открытия/закрытия меню ---
   toggleObjectTypes() {
     this.isObjectTypesOpen = !this.isObjectTypesOpen;
   }
@@ -121,6 +163,7 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
     this.isUsersOpen = !this.isUsersOpen;
   }
 
+  // --- Методы для включения/выключения объектов на карте ---
   toggleWellVisibility(id: number, event: Event) {
     const visible = (event.target as HTMLInputElement).checked;
     this.objectService.toggleWellVisibility(id, visible);
@@ -141,6 +184,7 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
     this.objectService.toggleGroupVisibility(type, visible);
   }
 
+  // --- Работа с трубами и сегментами ---
   togglePipeSegments(pipeId: number) {
     if (this.openPipeIds.has(pipeId)) {
       this.openPipeIds.delete(pipeId);
@@ -160,7 +204,7 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
         fromIndex: i - 1,
         toIndex: i,
         id,
-        visible: this.segmentVisibility.get(id) ?? true
+        visible: this.segmentVisibility.get(id) ?? true,
       });
     }
     return segments;
@@ -172,6 +216,7 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
     // Здесь можно добавить вызов сервиса для обновления видимости на карте, если нужно
   }
 
+  // --- Методы для открытия паспортов объектов ---
   onOpenWellPassport(well: Well) {
     this.openPassportRequested.emit({ type: 'well', data: well });
   }
@@ -189,15 +234,20 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
     this.openPassportRequested.emit({ type: 'pipe-segment', data: segment });
   }
 
+  // --- Методы для перелётов на объект ---
   onFlyToWell(well: Well) {
     if (this.mainMap && well.position) {
-      this.mainMap.flyTo([well.position[1], well.position[0]], Math.max(this.mainMap.getZoom(), 17), { animate: true });
+      this.mainMap.flyTo(
+        [well.position[1], well.position[0]],
+        Math.max(this.mainMap.getZoom(), 17),
+        { animate: true }
+      );
     }
   }
 
   onFlyToPipe(pipe: Pipe) {
     if (this.mainMap && pipe.vertices && pipe.vertices.length > 0) {
-      const latlngs = pipe.vertices.map(v => [v[1], v[0]]);
+      const latlngs = pipe.vertices.map((v) => [v[1], v[0]]);
       const bounds = L.latLngBounds(latlngs as [number, number][]);
       this.mainMap.flyToBounds(bounds, { animate: true, maxZoom: 17 });
     }
@@ -207,7 +257,7 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
     if (this.mainMap && segment.from && segment.to) {
       const bounds = L.latLngBounds([
         [segment.from[1], segment.from[0]],
-        [segment.to[1], segment.to[0]]
+        [segment.to[1], segment.to[0]],
       ]);
       this.mainMap.flyToBounds(bounds, { animate: true, maxZoom: 18 });
     }
@@ -215,7 +265,11 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
 
   onFlyToUser(user: User) {
     if (this.mainMap && user.position) {
-      this.mainMap.flyTo([user.position[1], user.position[0]], Math.max(this.mainMap.getZoom(), 17), { animate: true });
+      this.mainMap.flyTo(
+        [user.position[1], user.position[0]],
+        Math.max(this.mainMap.getZoom(), 17),
+        { animate: true }
+      );
     }
   }
 
@@ -237,28 +291,45 @@ export class LeftHeaderComponent implements AfterViewInit, OnChanges, OnDestroy 
 
   onFlyToCapture(obj: Capture) {
     if (this.mainMap && obj.position) {
-      this.mainMap.flyTo([obj.position[1], obj.position[0]], Math.max(this.mainMap.getZoom(), 17), { animate: true });
+      this.mainMap.flyTo(
+        [obj.position[1], obj.position[0]],
+        Math.max(this.mainMap.getZoom(), 17),
+        { animate: true }
+      );
     }
   }
 
   onFlyToPump(obj: Pump) {
     if (this.mainMap && obj.position) {
-      this.mainMap.flyTo([obj.position[1], obj.position[0]], Math.max(this.mainMap.getZoom(), 17), { animate: true });
+      this.mainMap.flyTo(
+        [obj.position[1], obj.position[0]],
+        Math.max(this.mainMap.getZoom(), 17),
+        { animate: true }
+      );
     }
   }
 
   onFlyToReservoir(obj: Reservoir) {
     if (this.mainMap && obj.position) {
-      this.mainMap.flyTo([obj.position[1], obj.position[0]], Math.max(this.mainMap.getZoom(), 17), { animate: true });
+      this.mainMap.flyTo(
+        [obj.position[1], obj.position[0]],
+        Math.max(this.mainMap.getZoom(), 17),
+        { animate: true }
+      );
     }
   }
 
   onFlyToTower(obj: Tower) {
     if (this.mainMap && obj.position) {
-      this.mainMap.flyTo([obj.position[1], obj.position[0]], Math.max(this.mainMap.getZoom(), 17), { animate: true });
+      this.mainMap.flyTo(
+        [obj.position[1], obj.position[0]],
+        Math.max(this.mainMap.getZoom(), 17),
+        { animate: true }
+      );
     }
   }
 
+  // --- Методы для переключения видимости других объектов ---
   toggleCaptureVisibility(id: number, event: Event) {
     const visible = (event.target as HTMLInputElement).checked;
     this.objectService.toggleCaptureVisibility(id, visible);

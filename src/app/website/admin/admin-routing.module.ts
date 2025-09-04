@@ -1,22 +1,16 @@
 import { NgModule, createComponent } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
-import { StructurComponent } from './pages/structur/structur.component';
-import { StructureComponent } from './pages/structure/structure.component';
+import { StructurComponent } from './structur/structur.component';
 
 const routes: Routes = [
-    {
-        path: 'structure',
-        component: StructureComponent,
-    },
-    {
-        path: 'structur',
-        component: StructurComponent,
-    },
-    
+  {
+    path: 'structur',
+    component: StructurComponent,
+  },
 ];
 
 @NgModule({
-    imports: [RouterModule.forChild(routes)],
-    exports: [RouterModule],
+  imports: [RouterModule.forChild(routes)],
+  exports: [RouterModule],
 })
 export class AdminRoutingModule {}

@@ -1,0 +1,179 @@
+.menu-main {
+  min-height: 100vh;
+  background: #f0f3f8;
+  font-family: "Montserrat", Arial, sans-serif;
+}
+
+.top-header {
+  height: 80px;
+  background: #182026;
+  display: flex;
+  align-items: center;
+  padding: 0 80px;
+  gap: 40px;
+  p {
+    font-size: 1.125rem;
+    font-weight: 400;
+    color: #fff;
+    cursor: pointer;
+    &.logout-btn {
+      color: rgba(255, 255, 255, 0.4);
+      transition: color 0.2s;
+      &:hover {
+        color: #fff;
+      }
+      &:active {
+        color: #256fff;
+      }
+    }
+  }
+}
+
+.title {
+  font-size: 3rem;
+  font-weight: 700;
+  color: #182026;
+  padding-top: 48px;
+  padding-left: 80px;
+}
+
+.main-content {
+  padding: 32px 80px;
+}
+
+button {
+  background: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #256fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(37, 111, 255, 0.08);
+  cursor: pointer;
+  margin-bottom: 24px;
+  transition: background 0.2s;
+  &:hover {
+    background: #f5faff;
+  }
+}
+
+.organization {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(24, 32, 38, 0.08);
+  margin-bottom: 24px;
+  overflow: hidden;
+  transition: box-shadow 0.2s;
+  .organization-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #256fff;
+    background: #f5faff;
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+    svg {
+      margin-left: 16px;
+      transition: transform 0.3s;
+      // Добавьте класс .open к svg, когда раскрыто
+      &.open {
+        transform: rotate(180deg);
+      }
+    }
+  }
+}
+
+.podrazdelenie {
+  background: #f8fafd;
+  border-radius: 0 0 12px 12px;
+  padding: 0 32px 24px 32px;
+  .podrazdelenie-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #256fff;
+    margin: 24px 0 12px 0;
+  }
+  .podrazdelenie-list {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 6px rgba(24, 32, 38, 0.06);
+    padding: 16px;
+    margin-bottom: 16px;
+    button {
+      margin-bottom: 16px;
+      background: #f5faff;
+      color: #256fff;
+      font-size: 1rem;
+      font-weight: 500;
+      svg {
+        margin-right: 6px;
+      }
+    }
+    .users {
+      .user {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 10px 0;
+        border-bottom: 1px solid #f0f3f8;
+        &:last-child {
+          border-bottom: none;
+        }
+        p {
+          margin: 0;
+          font-size: 1rem;
+          color: #182026;
+          &.user-number {
+            width: 32px;
+            text-align: center;
+          }
+          &.user-name,
+          &.user-surname,
+          &.user-patronymic {
+            width: 120px;
+          }
+          &.user-role {
+            width: 180px;
+            color: #256fff;
+          }
+        }
+        button {
+          background: none;
+          color: #256fff;
+          font-size: 0.95rem;
+          font-weight: 500;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          box-shadow: none;
+          padding: 0;
+          margin: 0;
+          &:hover {
+            text-decoration: underline;
+          }
+        }
+      }
+    }
+  }
+}
+
+// Стили для вложенных аккордеонов (если нужно много организаций/подразделений)
+.organization,
+.podrazdelenie-list {
+  margin-bottom: 16px;
+}
+
+// Для стрелок-аккордеонов
+svg {
+  transition: transform 0.3s;
+  &.open {
+    transform: rotate(180deg);
+  }
+}
