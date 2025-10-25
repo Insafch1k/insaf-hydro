@@ -8,8 +8,6 @@ import { MapMenuComponent } from './components/map-menu/map-menu.component';
 import { LeftHeaderComponent } from './components/left-header/left-header.component';
 import { PassportComponent } from './passport/passport.component';
 
-
-
 @NgModule({
   declarations: [
     MapComponent,
@@ -18,8 +16,6 @@ import { PassportComponent } from './passport/passport.component';
     LeftHeaderComponent,
     PassportComponent,
   ],
-  imports: [
-    CommonModule, MapRoutingModule, FormsModule, ReactiveFormsModule
-  ]
+  imports: [CommonModule, MapRoutingModule, FormsModule, ReactiveFormsModule],
 })
-export class MapModule { }
+export class MapModule {}
