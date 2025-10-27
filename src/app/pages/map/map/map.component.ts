@@ -9,9 +9,11 @@ import {
 import * as d3 from 'd3';
 import * as L from 'leaflet';
 import { Subscription } from 'rxjs';
-import { ObjectService, Well, Pipe, User } from '../services/object.service';
+import { ObjectService } from '../services/object.service';
 import { DataSchemeService } from '../services/data-scheme.service';
 import { Router } from '@angular/router';
+
+import { Point, Well, User, Pipe } from './map-types';
 
 // Подключает карту (Leaflet), поверх неё рисует объекты (скважины, трубы, потребителей и др.) через D3.
 // Реализует инструменты: добавление скважин, рисование труб, подключение пользователей.
@@ -19,8 +21,6 @@ import { Router } from '@angular/router';
 // Работает с данными (подгружает схему через сервисы, хранит текущее состояние объектов).
 // Обновляет позиции и перерисовывает объекты при зуме/перемещении карты.
 // Управляет контекстным меню (ПКМ) и диалогами (например, выбор диаметра трубы).
-
-type Point = [number, number];
 
 @Component({
   selector: 'app-map',

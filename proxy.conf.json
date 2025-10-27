@@ -1,0 +1,8 @@
+{
+  "/api": {
+    "target": "http://api.zgidro.ru",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  }
+}
