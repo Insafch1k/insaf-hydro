@@ -107,23 +107,44 @@ export class ObjectService {
     this.createdObjects.push({ type: 'Скважина', data: newWell });
     this.state.next(currentState);
   }
-
   addPipe(
     vertices: [number, number][],
     userConnections: { from: [number, number]; to: [number, number] }[],
-    diameter: number
+    diameter: number,
+    name: string = `Труба #${this.pipeIdCounter}`
   ) {
-    const currentState = this.state.value;
-    const newPipe = {
-      id: this.pipeIdCounter++,
-      vertices,
-      userConnections,
-      visible: true,
-      diameter,
-    };
-    currentState.pipes.push(newPipe);
-    this.createdObjects.push({ type: 'Труба', data: newPipe });
-    this.state.next(currentState);
+    for (let i = 1; i < vertices.length; i++) {
+      const segment = [vertices[i - 1], vertices[i]];
+
+      const newPipe = {
+        id: this.pipeIdCounter++,
+        vertices: segment,
+        userConnections:
+          userConnections.length > 0
+            ? [userConnections[i - 1] || userConnections[0]]
+            : [],
+        visible: true,
+        diameter,
+      };
+
+      this.createdObjects.push({
+        type: 'Труба',
+        data: { ...newPipe, _name: name },
+      });
+    }
+
+    this.state.next({
+      ...this.state.value,
+      pipes: [
+        ...this.state.value.pipes,
+        ...this.createdObjects
+          .filter((obj) => obj.type === 'Труба')
+          .map((obj) => {
+            const { _name, ...pipeData } = obj.data;
+            return pipeData as Pipe;
+          }),
+      ],
+    });
   }
 
   addUser(position: [number, number]) {

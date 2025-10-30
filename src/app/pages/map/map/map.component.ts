@@ -9,11 +9,9 @@ import {
 import * as d3 from 'd3';
 import * as L from 'leaflet';
 import { Subscription } from 'rxjs';
-import { ObjectService } from '../services/object.service';
+import { Well, User, Pipe, ObjectService } from '../services/object.service';
 import { DataSchemeService } from '../services/data-scheme.service';
 import { Router } from '@angular/router';
-
-import { Point, Well, User, Pipe } from './map-types';
 
 // Подключает карту (Leaflet), поверх неё рисует объекты (скважины, трубы, потребителей и др.) через D3.
 // Реализует инструменты: добавление скважин, рисование труб, подключение пользователей.
@@ -21,6 +19,8 @@ import { Point, Well, User, Pipe } from './map-types';
 // Работает с данными (подгружает схему через сервисы, хранит текущее состояние объектов).
 // Обновляет позиции и перерисовывает объекты при зуме/перемещении карты.
 // Управляет контекстным меню (ПКМ) и диалогами (например, выбор диаметра трубы).
+
+type Point = [number, number];
 
 @Component({
   selector: 'app-map',
@@ -250,8 +250,8 @@ export class MapComponent
           .map((f: any) => ({
             id: f.id,
             position: [
-              f.geometry.coordinates[1],
               f.geometry.coordinates[0],
+              f.geometry.coordinates[1],
             ] as [number, number],
             visible: true,
           }));
@@ -260,8 +260,8 @@ export class MapComponent
           .map((f: any) => ({
             id: f.id,
             position: [
-              f.geometry.coordinates[1],
               f.geometry.coordinates[0],
+              f.geometry.coordinates[1],
             ] as [number, number],
             visible: true,
           }));
@@ -269,31 +269,62 @@ export class MapComponent
           (f: any) =>
             f.name_object_type === 'Труба' && f.geometry.type === 'LineString'
         );
+        const maxPipeId = pipeSegments.reduce(
+          (max: number, seg: any) => Math.max(max, seg.id || 0),
+          0
+        );
+        this.objectService['pipeIdCounter'] = maxPipeId + 1;
         const pipesMap = new Map<
           string,
-          { vertices: [number, number][]; diameter: number }
-        >();
-        pipeSegments.forEach((seg: any) => {
-          const name = seg.properties?.Имя || String(seg.id);
-          if (!pipesMap.has(name)) {
-            pipesMap.set(name, {
-              vertices: [],
-              diameter: seg.properties?.diameter || 0,
-            });
+          {
+            vertices: [number, number][];
+            diameter: number;
+            originalSegIds: any[];
           }
+        >();
+
+        pipeSegments.forEach((seg: any) => {
+          // Создаём ключ: по имени трубы (Имя) или ID, если имени нет
+          const key = `${seg.properties?.Имя || 'pipe'}`;
+
+          // Если трубы с таким именем ещё нет — создаём запись
+          if (!pipesMap.has(key)) {
+            pipesMap.set(key, {
+              vertices: [],
+              diameter:
+                seg.properties?.['Диаметр'] || seg.properties?.diameter || 0,
+              originalSegIds: [seg.id],
+            });
+          } else {
+            // Если уже есть — просто добавляем ID сегмента
+            pipesMap.get(key)!.originalSegIds.push(seg.id);
+          }
+
+          // Добавляем все координаты сегмента в общие вершины трубы
           seg.geometry.coordinates.forEach((coord: [number, number]) => {
-            pipesMap.get(name)!.vertices.push([coord[1], coord[0]]);
+            pipesMap.get(key)!.vertices.push(coord);
           });
         });
+
         const pipes = Array.from(pipesMap.entries()).map(
-          ([name, data], idx) => ({
-            id: idx + 1,
-            vertices: data.vertices,
-            userConnections: [],
-            visible: true,
-            diameter: data.diameter,
-          })
+          ([key, data], index) => {
+            // Берём первый id или создаём новый, если не было
+            const originalId =
+              data.originalSegIds.length > 0
+                ? data.originalSegIds[0]
+                : this.objectService['pipeIdCounter'] + index;
+
+            return {
+              id: originalId,
+              name: key, // добавляем имя, если нужно потом различать
+              vertices: data.vertices,
+              userConnections: [],
+              visible: true,
+              diameter: data.diameter,
+            };
+          }
         );
+
         this.objectService['state'].next({
           wells,
           pipes,
@@ -409,48 +440,56 @@ export class MapComponent
       .attr(
         'x',
         (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).x - 12
+          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
+            .x - 12
       )
       .attr(
         'y',
         (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).y - 12
+          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
+            .y - 12
       );
     this.g
       .selectAll('image.pump-icon')
       .attr(
         'x',
         (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).x - 12
+          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
+            .x - 12
       )
       .attr(
         'y',
         (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).y - 12
+          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
+            .y - 12
       );
     this.g
       .selectAll('image.reservoir-icon')
       .attr(
         'x',
         (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).x - 12
+          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
+            .x - 12
       )
       .attr(
         'y',
         (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).y - 12
+          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
+            .y - 12
       );
     this.g
       .selectAll('image.tower-icon')
       .attr(
         'x',
         (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).x - 12
+          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
+            .x - 12
       )
       .attr(
         'y',
         (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d[0])).y - 12
+          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
+            .y - 12
       );
   }
 
@@ -468,7 +507,7 @@ export class MapComponent
       this.map.getContainer().style.cursor = this.editMode ? 'pointer' : '';
     } else {
       this.selectedTool = tool;
-      this.isDrawingPipe = false;
+      this.isDrawingPipe = true;
       this.currentPipe = [];
       this.currentPipeUsers = [];
       this.tempLine = null;
@@ -572,20 +611,23 @@ export class MapComponent
 
   // завершает рисование трубы и сохраняет её
   finalizePipe() {
-    if (this.currentPipe.length > 1 && this.currentPipeUsers.length === 0) {
-      const lastIdx = this.currentPipe.length - 1;
-      const lastPoint = this.currentPipe[lastIdx];
-      const prevPoint = this.currentPipe[lastIdx - 1];
-      this.objectService.addUser(lastPoint);
-      this.currentPipeUsers.push({ from: prevPoint, to: lastPoint });
-    }
     if (this.currentPipe.length > 1 && this.pipeDiameter != null) {
+      const userConnections = [...this.currentPipeUsers];
+
+      if (userConnections.length === 0) {
+        const last = this.currentPipe[this.currentPipe.length - 1];
+        const prev = this.currentPipe[this.currentPipe.length - 2];
+        this.objectService.addUser(last);
+        userConnections.push({ from: prev, to: last });
+      }
+
       this.objectService.addPipe(
         [...this.currentPipe],
-        [...this.currentPipeUsers],
+        userConnections,
         this.pipeDiameter
       );
     }
+
     this.currentPipe = [];
     this.currentPipeUsers = [];
     this.pipeDiameter = null;
@@ -1439,163 +1481,85 @@ export class MapComponent
       console.log('Нет объектов для удаления');
     }
 
-    // 2) Готовим созданные объекты
-    const currentState = this.objectService['state'].value; // берём напрямую, т.к. BehaviorSubject
-    const features: any[] = [];
-
-    // Скважины
-    currentState.wells.forEach((well) => {
-      features.push({
-        type: 'Feature',
-        id: well.id,
-        name_object_type: 'Скважина',
-        geometry: {
-          type: 'Point',
-          coordinates: [well.position[0], well.position[1]],
-        },
-        properties: {},
-      });
-    });
-
-    // Пользователи
-    currentState.users.forEach((user) => {
-      features.push({
-        type: 'Feature',
-        id: user.id,
-        name_object_type: 'Потребитель',
-        geometry: {
-          type: 'Point',
-          coordinates: [user.position[0], user.position[1]],
-        },
-        properties: {},
-      });
-    });
-
-    // Каптажи
-    currentState.captures.forEach((obj) => {
-      features.push({
-        type: 'Feature',
-        id: obj.id,
-        name_object_type: 'Каптаж',
-        geometry: {
-          type: 'Point',
-          coordinates: [obj.position[0], obj.position[1]],
-        },
-        properties: {},
-      });
-    });
-
-    // Насосы
-    currentState.pumps.forEach((obj) => {
-      features.push({
-        type: 'Feature',
-        id: obj.id,
-        name_object_type: 'Насос',
-        geometry: {
-          type: 'Point',
-          coordinates: [obj.position[0], obj.position[1]],
-        },
-        properties: {},
-      });
-    });
-
-    // Контр-резервуары
-    currentState.reservoirs.forEach((obj) => {
-      features.push({
-        type: 'Feature',
-        id: obj.id,
-        name_object_type: 'Контр-резервуар',
-        geometry: {
-          type: 'Point',
-          coordinates: [obj.position[0], obj.position[1]],
-        },
-        properties: {},
-      });
-    });
-
-    // Водонапорные башни
-    currentState.towers.forEach((obj) => {
-      features.push({
-        type: 'Feature',
-        id: obj.id,
-        name_object_type: 'Водонапорная башня',
-        geometry: {
-          type: 'Point',
-          coordinates: [obj.position[0], obj.position[1]],
-        },
-        properties: {},
-      });
-    });
-
-    // Трубы
-    currentState.pipes.forEach((pipe) => {
-      features.push({
-        type: 'Feature',
-        id: pipe.id,
-        name_object_type: 'Труба',
-        geometry: {
-          type: 'LineString',
-          coordinates: pipe.vertices.map((v) => [v[0], v[1]]),
-        },
-        properties: {
-          diameter: pipe.diameter,
-        },
-      });
-    });
-
     const createdObjects = this.objectService.getCreatedObjects();
 
-    if (createdObjects.length === 0) {
-      console.log('Нет новых объектов для создания.');
-    } else {
-      const features = createdObjects.map((obj) => {
-        const { type, data } = obj;
-        let geometry: any = null;
-        let properties: any = {};
+    if (createdObjects.length === 0) return;
 
-        if (type === 'Труба') {
-          geometry = {
-            type: 'LineString',
-            coordinates: data.vertices.map((v: [number, number]) => [
-              v[0],
-              v[1],
-            ]),
-          };
-          properties = { diameter: data.diameter };
-        } else {
-          geometry = {
-            type: 'Point',
-            coordinates: [data.position[0], data.position[1]],
-          };
-          properties = { Имя: `${type} #${data.id}` }; // Можно указать имя
+    const features: any[] = [];
+
+    createdObjects.forEach((obj) => {
+      const { type, data } = obj;
+
+      if (type === 'Труба') {
+        const name = data._name || `Труба #${data.id}`;
+        const diameter = data.diameter;
+
+        for (let i = 1; i < data.vertices.length; i++) {
+          const segment = [data.vertices[i - 1], data.vertices[i]];
+          features.push({
+            type: 'Feature',
+            name_object_type: 'Труба',
+            geometry: { type: 'LineString', coordinates: segment },
+            properties: { Имя: name, Диаметр: diameter, Адрес: 'Пушкина' },
+          });
         }
-
-        return {
+      } else if (type === 'Потребитель') {
+        if (!data.position) return; // пропускаем пустые объекты
+        features.push({
           type: 'Feature',
-          id: data.id,
+          name_object_type: 'Потребитель',
+          geometry: { type: 'Point', coordinates: data.position },
+          properties: {
+            Имя: `${type} #${data.id}`,
+            Адрес: 'улица Куйбышева, 47',
+            'Геодезическая отметка': 10.0,
+            'Диаметр выходного отверстия': 0.66,
+            Категория: '???',
+            'Минимальный напор воды': 15.0,
+            Напор: 3.0,
+            'Относительный расход воды': 8.0,
+            'Полный напор': 5.0,
+            'Расчетный расход воды в будний день': 70.0,
+            'Расчетный расход воды в воскресенье': 100.0,
+            'Расчетный расход воды в праздники': 115.0,
+            'Расчетный расход воды в субботу': 110.0,
+            'Расчётный расход воды': 7.0,
+            'Способ задания потребителя': '???',
+            'Текущий расход воды': 95.0,
+            'Уровень воды': 18.0,
+          },
+        });
+      } else if (type === 'Скважина') {
+        if (!data.position) return;
+        features.push({
+          type: 'Feature',
+          name_object_type: 'Скважина',
+          geometry: { type: 'Point', coordinates: data.position },
+          properties: { Имя: `Скважина #${data.id}`, Адрес: '-' },
+        });
+      } else {
+        // остальные объекты, например Каптаж, Насос и т.д.
+        if (!data.position) return;
+        features.push({
+          type: 'Feature',
           name_object_type: type,
-          geometry,
-          properties,
-        };
-      });
+          geometry: { type: 'Point', coordinates: data.position },
+          properties: { Имя: `${type} #${data.id}`, Адрес: '-' },
+        });
+      }
+    });
 
-      const payload = {
-        data: {
-          type: 'FeatureCollection',
-          id_scheme: this.id_scheme,
-          features,
-        },
-      };
+    const payload = {
+      data: {
+        type: 'FeatureCollection',
+        id_scheme: this.id_scheme,
+        features,
+      },
+    };
 
-      this.dataSchemeService.createObjects(payload).subscribe({
-        next: (res) => {
-          console.log('Новые объекты успешно отправлены', res);
-          this.objectService.clearCreatedObjects();
-        },
-        error: (err) => {
-          console.error('Ошибка при отправке новых объектов:', err);
-        },
-      });
-    }
+    this.dataSchemeService.createObjects(payload).subscribe({
+      next: () => this.objectService.clearCreatedObjects(),
+      error: (err) => console.error('Ошибка при создании объектов', err),
+    });
   }
 }

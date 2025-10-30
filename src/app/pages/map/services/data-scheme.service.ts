@@ -41,7 +41,6 @@ export class DataSchemeService {
     const payload = {
       data: {
         type: 'FeatureCollection',
-        id_scheme,
         features: deletedObjects.map((obj) => ({
           id: obj.id,
           name_object_type: obj.type,
@@ -74,14 +73,24 @@ export class DataSchemeService {
       Accept: 'application/json',
     });
 
+    const correctedPayload = {
+      data: {
+        id_scheme: payload.data.id_scheme,
+        type: 'FeatureCollection',
+        features: payload.data.features,
+      },
+    };
+
     return this.http
-      .post(`/api/map/create_object`, payload, {
+      .post(`/api/map/create_object`, correctedPayload, {
         headers,
         withCredentials: true,
       })
       .pipe(
         catchError((err) => {
           console.error('Ошибка при отправке созданных объектов:', err);
+          console.error('Payload:', correctedPayload);
+          console.error('Ошибка детально:', err);
           return throwError(
             () => new Error('Ошибка при отправке созданных объектов')
           );
