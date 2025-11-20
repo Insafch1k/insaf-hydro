@@ -261,72 +261,14 @@ export class ObjectService {
     this.state.next(currentState);
   }
 
-  deletePipeSegment(pipeId: number, fromIndex: number, toIndex: number) {
+  deletePipeSegment(pipeId: number) {
     const currentState = this.state.value;
     const pipe = currentState.pipes.find((p) => p.id === pipeId);
-    if (!pipe) {
-      console.error('Труба не найдена:', pipeId);
-      return;
-    }
+    if (!pipe) return;
 
-    // Проверяем, что сегмент существует (fromIndex и toIndex должны быть соседними)
-    if (
-      fromIndex + 1 !== toIndex ||
-      fromIndex < 0 ||
-      toIndex >= pipe.vertices.length
-    ) {
-      console.error('Недопустимые индексы сегмента:', {
-        pipeId,
-        fromIndex,
-        toIndex,
-      });
-      return;
-    }
-
-    const newPipes: Pipe[] = [];
-    // Разделяем трубу на две части, если сегмент не на краю
-    if (fromIndex > 0) {
-      const leftVertices = pipe.vertices.slice(0, fromIndex + 1);
-      if (leftVertices.length >= 2) {
-        newPipes.push({
-          id: this.pipeIdCounter++,
-          vertices: leftVertices,
-          userConnections: pipe.userConnections.filter((conn) =>
-            leftVertices.some(
-              (v) =>
-                this.isSamePoint(v, conn.from) || this.isSamePoint(v, conn.to)
-            )
-          ),
-          visible: true,
-          diameter: pipe.diameter,
-        });
-      }
-    }
-    if (toIndex < pipe.vertices.length - 1) {
-      const rightVertices = pipe.vertices.slice(toIndex);
-      if (rightVertices.length >= 2) {
-        newPipes.push({
-          id: this.pipeIdCounter++,
-          vertices: rightVertices,
-          userConnections: pipe.userConnections.filter((conn) =>
-            rightVertices.some(
-              (v) =>
-                this.isSamePoint(v, conn.from) || this.isSamePoint(v, conn.to)
-            )
-          ),
-          visible: true,
-          diameter: pipe.diameter,
-        });
-      }
-    }
-
-    // Удаляем оригинальную трубу и добавляем новые
     this.state.next({
       ...currentState,
-      pipes: [
-        ...currentState.pipes.filter((p) => p.id !== pipeId),
-        ...newPipes,
-      ],
+      pipes: currentState.pipes.filter((p) => p.id !== pipeId),
       deletedObjects: [
         ...currentState.deletedObjects,
         { type: 'Труба', id: pipeId },
@@ -409,6 +351,27 @@ export class ObjectService {
     this.state.next(currentState);
   }
 
+  private updatedObjects: any[] = [];
+
+  getUpdatedObjects() {
+    return this.updatedObjects;
+  }
+
+  clearUpdatedObjects() {
+    this.updatedObjects = [];
+  }
+
+  markUpdated(type: string, obj: any) {
+    const index = this.updatedObjects.findIndex(
+      (o) => o.type === type && o.data.id === obj.id
+    );
+    if (index >= 0) {
+      this.updatedObjects[index].data = obj;
+    } else {
+      this.updatedObjects.push({ type, data: obj });
+    }
+  }
+
   moveWell(id: number, newPosition: [number, number]) {
     const currentState = this.state.value;
     const well = currentState.wells.find((w) => w.id === id);
@@ -431,6 +394,7 @@ export class ObjectService {
       });
       well.position = newPosition;
       this.state.next(currentState);
+      this.markUpdated('Скважина', well);
     }
   }
 
@@ -453,29 +417,74 @@ export class ObjectService {
       });
       user.position = newPosition;
       this.state.next(currentState);
+      this.markUpdated('Потребитель', user);
     }
   }
 
-  movePipeVertex(
-    pipeId: number,
-    vertexIndex: number,
-    newPosition: [number, number]
-  ) {
+  getAllConnectedVertices(pipes: Pipe[], targetPos: [number, number]) {
+    const result: { pipe: Pipe; vertexIndexes: number[] }[] = [];
+
+    pipes.forEach((pipe) => {
+      const indexes = pipe.vertices
+        .map((v, i) => (this.isSamePoint(v, targetPos) ? i : -1))
+        .filter((i) => i !== -1);
+
+      if (indexes.length > 0) {
+        result.push({ pipe, vertexIndexes: indexes });
+      }
+    });
+
+    return result;
+  }
+
+  movePipeVertex(oldPos: [number, number], newPos: [number, number]) {
     const currentState = this.state.value;
-    const pipe = currentState.pipes.find((p) => p.id === pipeId);
-    if (pipe && pipe.vertices[vertexIndex]) {
-      const oldPosition = pipe.vertices[vertexIndex];
-      pipe.vertices[vertexIndex] = newPosition;
-      pipe.userConnections.forEach((conn) => {
-        if (this.isSamePoint(conn.from, oldPosition)) {
-          conn.from = newPosition;
-        }
-        if (this.isSamePoint(conn.to, oldPosition)) {
-          conn.to = newPosition;
-        }
+
+    console.group('movePipeVertex debug');
+
+    const connectedVertices = this.getAllConnectedVertices(
+      currentState.pipes,
+      oldPos
+    );
+
+    connectedVertices.forEach(({ pipe, vertexIndexes }) => {
+      console.log(
+        `Труба ${pipe.id}: совпавшие вершины ${vertexIndexes.join(', ')}`
+      );
+
+      vertexIndexes.forEach((i) => {
+        pipe.vertices[i] = [...newPos];
       });
-      this.state.next(currentState);
-    }
+
+      const updatedSegments: [[number, number], [number, number]][] = [];
+      vertexIndexes.forEach((i) => {
+        if (i > 0)
+          updatedSegments.push([pipe.vertices[i - 1], pipe.vertices[i]]);
+        if (i < pipe.vertices.length - 1)
+          updatedSegments.push([pipe.vertices[i], pipe.vertices[i + 1]]);
+      });
+
+      const uniqueSegments = updatedSegments.filter(
+        (seg, index, self) =>
+          index ===
+          self.findIndex(
+            (s) =>
+              s[0][0] === seg[0][0] &&
+              s[0][1] === seg[0][1] &&
+              s[1][0] === seg[1][0] &&
+              s[1][1] === seg[1][1]
+          )
+      );
+
+      console.log(
+        `Труба ${pipe.id}: обновлено ${uniqueSegments.length} сегментов`
+      );
+
+      this.markUpdated('Труба', { ...pipe, updatedSegments: uniqueSegments });
+    });
+
+    console.groupEnd();
+    this.state.next(currentState);
   }
 
   movePipeSegment(
@@ -486,49 +495,31 @@ export class ObjectService {
   ) {
     const currentState = this.state.value;
     const pipe = currentState.pipes.find((p) => p.id === pipeId);
-    if (pipe && pipe.vertices[fromIndex] && pipe.vertices[toIndex]) {
-      const oldFrom = pipe.vertices[fromIndex];
-      const oldTo = pipe.vertices[toIndex];
-      pipe.vertices[fromIndex] = [oldFrom[0] + delta[0], oldFrom[1] + delta[1]];
-      pipe.vertices[toIndex] = [oldTo[0] + delta[0], oldTo[1] + delta[1]];
+    if (!pipe || !pipe.vertices[fromIndex] || !pipe.vertices[toIndex]) return;
+    for (let i = fromIndex; i <= toIndex; i++) {
+      const oldPos = pipe.vertices[i];
+      pipe.vertices[i] = [oldPos[0] + delta[0], oldPos[1] + delta[1]];
       pipe.userConnections.forEach((conn) => {
-        if (
-          this.isSamePoint(conn.from, oldFrom) ||
-          this.isSamePoint(conn.from, oldTo)
-        ) {
-          conn.from = [conn.from[0] + delta[0], conn.from[1] + delta[1]];
+        if (this.isSamePoint(conn.from, oldPos)) {
+          conn.from = [...pipe.vertices[i]];
         }
-        if (
-          this.isSamePoint(conn.to, oldFrom) ||
-          this.isSamePoint(conn.to, oldTo)
-        ) {
-          conn.to = [conn.to[0] + delta[0], conn.to[1] + delta[1]];
+        if (this.isSamePoint(conn.to, oldPos)) {
+          conn.to = [...pipe.vertices[i]];
         }
       });
       currentState.wells.forEach((well) => {
-        if (
-          this.isSamePoint(well.position, oldFrom) ||
-          this.isSamePoint(well.position, oldTo)
-        ) {
-          well.position = [
-            well.position[0] + delta[0],
-            well.position[1] + delta[1],
-          ];
+        if (this.isSamePoint(well.position, oldPos)) {
+          well.position = [...pipe.vertices[i]];
         }
       });
       currentState.users.forEach((user) => {
-        if (
-          this.isSamePoint(user.position, oldFrom) ||
-          this.isSamePoint(user.position, oldTo)
-        ) {
-          user.position = [
-            user.position[0] + delta[0],
-            user.position[1] + delta[1],
-          ];
+        if (this.isSamePoint(user.position, oldPos)) {
+          user.position = [...pipe.vertices[i]];
         }
       });
-      this.state.next(currentState);
     }
+    this.markUpdated('Труба', pipe);
+    this.state.next(currentState);
   }
 
   moveCapture(id: number, newPosition: [number, number]) {
@@ -537,6 +528,7 @@ export class ObjectService {
     if (obj) {
       obj.position = newPosition;
       this.state.next(currentState);
+      this.markUpdated('Каптаж', obj);
     }
   }
 
@@ -546,6 +538,7 @@ export class ObjectService {
     if (obj) {
       obj.position = newPosition;
       this.state.next(currentState);
+      this.markUpdated('Насос', obj);
     }
   }
 
@@ -555,6 +548,7 @@ export class ObjectService {
     if (obj) {
       obj.position = newPosition;
       this.state.next(currentState);
+      this.markUpdated('Резервуар', obj);
     }
   }
 
@@ -564,6 +558,7 @@ export class ObjectService {
     if (obj) {
       obj.position = newPosition;
       this.state.next(currentState);
+      this.markUpdated('Башня', obj);
     }
   }
 

@@ -245,6 +245,7 @@ export class MapComponent
   loadSchemeById(id_scheme: number) {
     this.dataSchemeService.getSchemeData(id_scheme).subscribe({
       next: (geojson) => {
+        // Скважины
         const wells = (geojson.features || [])
           .filter((f: any) => f.name_object_type === 'Скважина')
           .map((f: any) => ({
@@ -255,6 +256,8 @@ export class MapComponent
             ] as [number, number],
             visible: true,
           }));
+
+        // Потребители
         const users = (geojson.features || [])
           .filter((f: any) => f.name_object_type === 'Потребитель')
           .map((f: any) => ({
@@ -265,66 +268,32 @@ export class MapComponent
             ] as [number, number],
             visible: true,
           }));
+
+        // Сегменты труб
         const pipeSegments = (geojson.features || []).filter(
           (f: any) =>
             f.name_object_type === 'Труба' && f.geometry.type === 'LineString'
         );
+
+        // Счётчик для ID новых труб, если id нет
         const maxPipeId = pipeSegments.reduce(
           (max: number, seg: any) => Math.max(max, seg.id || 0),
           0
         );
         this.objectService['pipeIdCounter'] = maxPipeId + 1;
-        const pipesMap = new Map<
-          string,
-          {
-            vertices: [number, number][];
-            diameter: number;
-            originalSegIds: any[];
-          }
-        >();
 
-        pipeSegments.forEach((seg: any) => {
-          // Создаём ключ: по имени трубы (Имя) или ID, если имени нет
-          const key = `${seg.properties?.Имя || 'pipe'}`;
+        // Создаём отдельную трубу для каждого сегмента
+        const pipes = pipeSegments.map((seg: any, index: any) => ({
+          id: seg.id || this.objectService['pipeIdCounter'] + index,
+          name: seg.properties?.Имя || `pipe_${index}`,
+          vertices: seg.geometry.coordinates as [number, number][],
+          userConnections: [],
+          visible: true,
+          diameter:
+            seg.properties?.['Диаметр'] || seg.properties?.diameter || 0,
+        }));
 
-          // Если трубы с таким именем ещё нет — создаём запись
-          if (!pipesMap.has(key)) {
-            pipesMap.set(key, {
-              vertices: [],
-              diameter:
-                seg.properties?.['Диаметр'] || seg.properties?.diameter || 0,
-              originalSegIds: [seg.id],
-            });
-          } else {
-            // Если уже есть — просто добавляем ID сегмента
-            pipesMap.get(key)!.originalSegIds.push(seg.id);
-          }
-
-          // Добавляем все координаты сегмента в общие вершины трубы
-          seg.geometry.coordinates.forEach((coord: [number, number]) => {
-            pipesMap.get(key)!.vertices.push(coord);
-          });
-        });
-
-        const pipes = Array.from(pipesMap.entries()).map(
-          ([key, data], index) => {
-            // Берём первый id или создаём новый, если не было
-            const originalId =
-              data.originalSegIds.length > 0
-                ? data.originalSegIds[0]
-                : this.objectService['pipeIdCounter'] + index;
-
-            return {
-              id: originalId,
-              name: key, // добавляем имя, если нужно потом различать
-              vertices: data.vertices,
-              userConnections: [],
-              visible: true,
-              diameter: data.diameter,
-            };
-          }
-        );
-
+        // Сохраняем состояние
         this.objectService['state'].next({
           wells,
           pipes,
@@ -539,7 +508,7 @@ export class MapComponent
       .attr('class', 'well')
       .datum(well)
       .on('click', (event: MouseEvent, d: Well) => {
-        if (!this.editMode) {
+        if (this.selectedTool === 'pipe') {
           event.stopPropagation();
           this.startPipeFromWell(well.position);
         }
@@ -1096,54 +1065,56 @@ export class MapComponent
     if (!this.contextTarget) return;
     const { type, data } = this.contextTarget;
 
-    if (type === 'well') {
-      this.objectService.deleteWell(data.id);
-      this.passports = this.passports.filter(
-        (p) => !(p.type === 'well' && p.data.id === data.id)
-      );
-    } else if (type === 'user') {
-      this.objectService.deleteUser(data.id);
-      this.passports = this.passports.filter(
-        (p) => !(p.type === 'user' && p.data.id === data.id)
-      );
-    } else if (type === 'pipe') {
-      this.objectService.deletePipe(data.id);
-      this.passports = this.passports.filter(
-        (p) => !(p.type === 'pipe' && p.data.id === data.id)
-      );
-    } else if (type === 'pipe-segment') {
-      this.objectService.deletePipeSegment(
-        data.pipeId,
-        data.fromIndex,
-        data.toIndex
-      );
-      this.passports = this.passports.filter(
-        (p) =>
-          !(
-            p.type === 'pipe-segment' &&
-            p.id === `${data.pipeId}_${data.fromIndex}_${data.toIndex}`
-          )
-      );
-    } else if (type === 'capture') {
-      this.objectService.deleteCapture(data.id);
-      this.passports = this.passports.filter(
-        (p) => !(p.type === 'capture' && p.data.id === data.id)
-      );
-    } else if (type === 'pump') {
-      this.objectService.deletePump(data.id);
-      this.passports = this.passports.filter(
-        (p) => !(p.type === 'pump' && p.data.id === data.id)
-      );
-    } else if (type === 'reservoir') {
-      this.objectService.deleteReservoir(data.id);
-      this.passports = this.passports.filter(
-        (p) => !(p.type === 'reservoir' && p.data.id === data.id)
-      );
-    } else if (type === 'tower') {
-      this.objectService.deleteTower(data.id);
-      this.passports = this.passports.filter(
-        (p) => !(p.type === 'tower' && p.data.id === data.id)
-      );
+    switch (type) {
+      case 'well':
+        this.objectService.deleteWell(data.id);
+        this.passports = this.passports.filter(
+          (p) => !(p.type === 'well' && p.data.id === data.id)
+        );
+        break;
+
+      case 'user':
+        this.objectService.deleteUser(data.id);
+        this.passports = this.passports.filter(
+          (p) => !(p.type === 'user' && p.data.id === data.id)
+        );
+        break;
+
+      case 'pipe':
+      case 'pipe-segment': // теперь сегмент — это отдельная труба, обрабатываем одинаково
+        this.objectService.deletePipeSegment(data.pipeId || data.id);
+        this.passports = this.passports.filter(
+          (p) => !(p.type === 'pipe' && p.data.id === (data.pipeId || data.id))
+        );
+        break;
+
+      case 'capture':
+        this.objectService.deleteCapture(data.id);
+        this.passports = this.passports.filter(
+          (p) => !(p.type === 'capture' && p.data.id === data.id)
+        );
+        break;
+
+      case 'pump':
+        this.objectService.deletePump(data.id);
+        this.passports = this.passports.filter(
+          (p) => !(p.type === 'pump' && p.data.id === data.id)
+        );
+        break;
+
+      case 'reservoir':
+        this.objectService.deleteReservoir(data.id);
+        this.passports = this.passports.filter(
+          (p) => !(p.type === 'reservoir' && p.data.id === data.id)
+        );
+        break;
+
+      case 'tower':
+        this.objectService.deleteTower(data.id);
+        this.passports = this.passports.filter(
+          (p) => !(p.type === 'tower' && p.data.id === data.id)
+        );
+        break;
     }
 
     this.redrawAll();
@@ -1296,33 +1267,60 @@ export class MapComponent
     } else if (this.dragState.type === 'user') {
       this.objectService.moveUser(this.dragState.id, newPos);
       this.redrawAllPipes(this.state.pipes, this.state.users);
+      // Обработка перетаскивания вершины — единый, ненамутирующий блок
     } else if (this.dragState.type === 'vertex') {
-      const pipe = this.state.pipes.find((p) => p.id === this.dragState.pipeId);
-      if (pipe) {
-        this.objectService.movePipeVertex(
-          this.dragState.pipeId,
-          this.dragState.vertexIndex,
-          newPos
-        );
-        this.redrawAllPipes(this.state.pipes, this.state.users);
-      }
+      const draggedPipe = this.state.pipes.find(
+        (p) => p.id === this.dragState.pipeId
+      );
+      if (!draggedPipe) return;
+
+      const vertexIndex = this.dragState.vertexIndex;
+      const draggedVertex = draggedPipe.vertices[vertexIndex];
+      if (!draggedVertex) return;
+
+      // новое положение вершины — вызываем функцию, которая двигает все совпадающие вершины
+      this.objectService.movePipeVertex(draggedVertex, newPos);
+
+      // мгновенное визуальное обновление
+      this.redrawAllPipes(this.state.pipes, this.state.users);
     } else if (this.dragState.type === 'segment') {
       const pipe = this.state.pipes.find((p) => p.id === this.dragState.pipeId);
-      if (pipe) {
-        const newCenter = newPos;
-        const delta: Point = [
-          newCenter[0] - this.dragState.initialCenter[0],
-          newCenter[1] - this.dragState.initialCenter[1],
-        ];
-        this.objectService.movePipeSegment(
-          this.dragState.pipeId,
-          this.dragState.fromIndex,
-          this.dragState.toIndex,
-          delta
-        );
-        this.dragState.initialCenter = newCenter;
-        this.redrawAllPipes(this.state.pipes, this.state.users);
-      }
+      if (!pipe) return;
+
+      const { fromIndex, toIndex } = this.dragState;
+
+      // Считаем delta относительно последнего события
+      const delta: Point = [
+        newPos[0] - this.dragState.initialCenter[0],
+        newPos[1] - this.dragState.initialCenter[1],
+      ];
+
+      // Собираем все вершины, которые нужно двигать
+      const verticesToMove: Set<Point> = new Set();
+      verticesToMove.add(pipe.vertices[fromIndex]);
+      verticesToMove.add(pipe.vertices[toIndex]);
+
+      this.state.pipes.forEach((p) => {
+        p.vertices.forEach((v) => {
+          if (
+            this.isSamePoint(v, pipe.vertices[fromIndex]) ||
+            this.isSamePoint(v, pipe.vertices[toIndex])
+          ) {
+            verticesToMove.add(v);
+          }
+        });
+      });
+
+      // Применяем delta ко всем вершинам одновременно
+      verticesToMove.forEach((v) => {
+        v[0] += delta[0];
+        v[1] += delta[1];
+      });
+
+      // обновляем центр для следующего события движения
+      this.dragState.initialCenter = newPos;
+
+      this.redrawAllPipes(this.state.pipes, this.state.users);
     } else if (this.dragState.type === 'capture') {
       this.objectService.moveCapture(this.dragState.id, newPos);
       this.redrawAllPipes(this.state.pipes, this.state.users);
@@ -1481,12 +1479,91 @@ export class MapComponent
       console.log('Нет объектов для удаления');
     }
 
+    //обновление
+    const updatedObjects = this.objectService.getUpdatedObjects();
+
+    if (updatedObjects.length > 0) {
+      const features: any[] = [];
+
+      updatedObjects.forEach((obj) => {
+        const { type, data } = obj;
+
+        if (type === 'Труба') {
+          const name = data._name || `Труба #${data.id}`;
+          const diameter = data.diameter || 0;
+
+          const uniqueSegments = new Set<string>();
+          const segmentsToSend = data.updatedSegments || [];
+
+          segmentsToSend.forEach(([from, to]: [Point, Point]) => {
+            const key = `${from[0]},${from[1]}-${to[0]},${to[1]}`;
+            if (uniqueSegments.has(key)) return;
+            uniqueSegments.add(key);
+
+            features.push({
+              type: 'Feature',
+              id: data.id,
+              name_object_type: 'Труба',
+              geometry: { type: 'LineString', coordinates: [from, to] },
+              properties: { Имя: name, Диаметр: diameter, Адрес: '-' },
+            });
+          });
+        } else if (type === 'Скважина') {
+          if (!data.position) return;
+          features.push({
+            type: 'Feature',
+            id: data.id,
+            name_object_type: 'Скважина',
+            geometry: { type: 'Point', coordinates: data.position },
+            properties: {
+              Имя: `Скважина #${data.id}`,
+              Адрес: '-',
+              Глубина: 0,
+              Диаметр: 0,
+            },
+          });
+        } else {
+          if (!data.position) return;
+
+          features.push({
+            type: 'Feature',
+            id: data.id,
+            name_object_type: type,
+            geometry: { type: 'Point', coordinates: data.position },
+            properties: {
+              Имя: `${type} #${data.id}`,
+              Адрес: 'улица Куйбышева, 47',
+              'Геодезическая отметка': 10.0,
+              'Диаметр выходного отверстия': 0.66,
+              Категория: '???',
+              'Минимальный напор воды': 15.0,
+              Напор: 3.0,
+              'Относительный расход воды': 8.0,
+              'Полный напор': 5.0,
+              'Расчетный расход воды в будний день': 70.0,
+              'Расчетный расход воды в воскресенье': 100.0,
+              'Расчетный расход воды в праздники': 115.0,
+              'Расчетный расход воды в субботу': 110.0,
+              'Расчётный расход воды': 7.0,
+              'Способ задания потребителя': '???',
+              'Текущий расход воды': 95.0,
+              'Уровень воды': 18.0,
+            },
+          });
+        }
+      });
+
+      const payload = { data: { type: 'FeatureCollection', features } };
+
+      this.dataSchemeService.updateObjects(payload).subscribe({
+        next: () => this.objectService.clearUpdatedObjects(),
+        error: (err) => console.error('Ошибка при обновлении объектов', err),
+      });
+    }
+
     const createdObjects = this.objectService.getCreatedObjects();
-
     if (createdObjects.length === 0) return;
-
     const features: any[] = [];
-
     createdObjects.forEach((obj) => {
       const { type, data } = obj;
 
@@ -1535,7 +1612,12 @@ export class MapComponent
           type: 'Feature',
           name_object_type: 'Скважина',
           geometry: { type: 'Point', coordinates: data.position },
-          properties: { Имя: `Скважина #${data.id}`, Адрес: '-' },
+          properties: {
+            Имя: `Скважина #${data.id}`,
+            Адрес: '-',
+            Глубина: 0,
+            Диаметр: 0,
+          },
         });
       } else {
         // остальные объекты, например Каптаж, Насос и т.д.

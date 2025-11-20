@@ -105,7 +105,7 @@ export class DataSchemeService {
     });
 
     return this.http
-      .post(`/api/map/update_object`, payload, {
+      .put(`/api/map/update_object`, payload, {
         headers,
         withCredentials: true,
       })
