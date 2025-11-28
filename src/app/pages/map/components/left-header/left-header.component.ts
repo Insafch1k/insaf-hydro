@@ -11,7 +11,6 @@ import {
 import * as L from 'leaflet';
 import { Subscription } from 'rxjs';
 import {
-  ObjectService,
   Well,
   Pipe,
   User,
@@ -19,7 +18,8 @@ import {
   Pump,
   Reservoir,
   Tower,
-} from '../../services/object.service';
+} from '../../map/map-types';
+import { ObjectService } from '../../services/object.service';
 
 // Это Angular-компонент LeftHeaderComponent, который работает с картой Leaflet.
 // Он отображает список объектов (скважины, трубы, пользователи, насосы и т. д.),

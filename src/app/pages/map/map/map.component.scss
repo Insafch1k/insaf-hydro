@@ -47,11 +47,11 @@ header {
 }
 
 .save-btn {
-  margin-left: auto;  
-  margin-right: 10px; 
+  margin-left: auto;
+  margin-right: 10px;
   background-color: rgba(24, 32, 38, 1);
   color: rgba(240, 243, 248, 1);
-  font-size: 18px;  
+  font-size: 18px;
   font-weight: 500;
   padding: 8px 20px;
   transition: all 0.15s ease-in-out;
@@ -59,13 +59,13 @@ header {
 
 .save-btn:hover {
   background-color: rgb(46, 58, 66);
-  color: rgba(240, 243, 248, 1);  
+  color: rgba(240, 243, 248, 1);
 }
 
 .save-btn:active {
-  background-color: rgb(30, 40, 48); 
-  transform: scale(0.97); 
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2); 
+  background-color: rgb(30, 40, 48);
+  transform: scale(0.97);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 svg {
@@ -235,6 +235,33 @@ button:hover {
   }
 }
 
-.diameter-dialog{
+.diameter-dialog {
   background-color: rgb(226, 234, 247);
+}
+
+.start-object-menu {
+  position: fixed;
+  background: white;
+  border: 1px solid #aaa;
+  padding: 4px;
+  z-index: 9999;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.start-object-item {
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.start-object-item:hover {
+  background: #e0e0e0;
+}
+
+circle.well-circle {
+  cursor: grab;
+  pointer-events: all;
+}
+circle.well-circle:active {
+  cursor: grabbing;
 }

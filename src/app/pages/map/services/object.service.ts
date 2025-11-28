@@ -1,64 +1,15 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
-
-export interface Well {
-  id: number;
-  position: [number, number];
-  visible: boolean;
-}
-
-export interface Pipe {
-  id: number;
-  vertices: [number, number][];
-  userConnections: { from: [number, number]; to: [number, number] }[];
-  visible: boolean;
-  diameter: number;
-}
-
-export interface User {
-  id: number;
-  position: [number, number];
-  visible: boolean;
-}
-
-export interface Capture {
-  id: number;
-  position: [number, number];
-  visible: boolean;
-  type: 'capture';
-}
-
-export interface Pump {
-  id: number;
-  position: [number, number];
-  visible: boolean;
-  type: 'pump';
-}
-
-export interface Reservoir {
-  id: number;
-  position: [number, number];
-  visible: boolean;
-  type: 'reservoir';
-}
-
-export interface Tower {
-  id: number;
-  position: [number, number];
-  visible: boolean;
-  type: 'tower';
-}
-
-interface ObjectState {
-  wells: Well[];
-  pipes: Pipe[];
-  users: User[];
-  captures: Capture[];
-  pumps: Pump[];
-  reservoirs: Reservoir[];
-  towers: Tower[];
-  deletedObjects: { type: string; id: number | string }[];
-}
+import {
+  Well,
+  Pipe,
+  User,
+  Capture,
+  Pump,
+  Reservoir,
+  Tower,
+  ObjectState,
+} from '../map/map-types';
 
 @Injectable({
   providedIn: 'root',
@@ -107,9 +58,9 @@ export class ObjectService {
     this.createdObjects.push({ type: 'Скважина', data: newWell });
     this.state.next(currentState);
   }
+
   addPipe(
     vertices: [number, number][],
-    userConnections: { from: [number, number]; to: [number, number] }[],
     diameter: number,
     name: string = `Труба #${this.pipeIdCounter}`
   ) {
@@ -119,10 +70,6 @@ export class ObjectService {
       const newPipe = {
         id: this.pipeIdCounter++,
         vertices: segment,
-        userConnections:
-          userConnections.length > 0
-            ? [userConnections[i - 1] || userConnections[0]]
-            : [],
         visible: true,
         diameter,
       };
@@ -210,6 +157,7 @@ export class ObjectService {
     this.createdObjects.push({ type: 'Водонапорная башня', data: newTower });
     this.state.next(currentState);
   }
+
   deleteWell(id: number) {
     const currentState = this.state.value;
     currentState.wells = currentState.wells.filter((well) => well.id !== id);
@@ -383,14 +331,6 @@ export class ObjectService {
             pipe.vertices[i] = newPosition;
           }
         });
-        pipe.userConnections.forEach((conn) => {
-          if (this.isSamePoint(conn.from, oldPosition)) {
-            conn.from = newPosition;
-          }
-          if (this.isSamePoint(conn.to, oldPosition)) {
-            conn.to = newPosition;
-          }
-        });
       });
       well.position = newPosition;
       this.state.next(currentState);
@@ -404,11 +344,6 @@ export class ObjectService {
     if (user) {
       const oldPosition = user.position;
       currentState.pipes.forEach((pipe) => {
-        pipe.userConnections.forEach((conn) => {
-          if (this.isSamePoint(conn.to, oldPosition)) {
-            conn.to = newPosition;
-          }
-        });
         pipe.vertices.forEach((v, i) => {
           if (this.isSamePoint(v, oldPosition)) {
             pipe.vertices[i] = newPosition;

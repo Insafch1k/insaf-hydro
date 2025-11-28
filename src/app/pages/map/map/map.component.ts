@@ -9,7 +9,7 @@ import {
 import * as d3 from 'd3';
 import * as L from 'leaflet';
 import { Subscription } from 'rxjs';
-import { Well, User, Pipe, ObjectService } from '../services/object.service';
+import { ObjectService } from '../services/object.service';
 import { DataSchemeService } from '../services/data-scheme.service';
 import { Router } from '@angular/router';
 
@@ -20,7 +20,37 @@ import { Router } from '@angular/router';
 // Обновляет позиции и перерисовывает объекты при зуме/перемещении карты.
 // Управляет контекстным меню (ПКМ) и диалогами (например, выбор диаметра трубы).
 
-type Point = [number, number];
+import {
+  Point,
+  MapState,
+  ContextTarget,
+  TempLine,
+  Passport,
+  DialogPosition,
+  Well,
+  User,
+  Pipe,
+  Tower,
+  Pump,
+  Reservoir,
+  Capture,
+} from './map-types';
+import {
+  updateSvgTransform,
+  updateObjectPositions,
+  createMap,
+  addGoogleLayer,
+  createSvgLayer,
+} from './map-render';
+
+type MapTool =
+  | 'well'
+  | 'pipe'
+  | 'user'
+  | 'capture'
+  | 'pump'
+  | 'reservoir'
+  | 'tower';
 
 @Component({
   selector: 'app-map',
@@ -30,7 +60,7 @@ type Point = [number, number];
 export class MapComponent
   implements AfterViewInit, OnDestroy, AfterViewChecked
 {
-  selectedTool: 'well' | 'pipe' | null = null;
+  selectedTool: MapTool | null = null;
   svg: any; // SVG слой для D3
   g: any; // группа для отрисовки объектов
 
@@ -38,33 +68,12 @@ export class MapComponent
   skipNextSamePointCheck = false;
   currentPipe: Point[] = []; // текущая труба (точки)
 
-  currentPipeUsers: { from: Point; to: Point }[] = [];
   contextMenuVisible = false;
   contextMenuPosition = { x: 0, y: 0 };
-  contextTarget: {
-    type:
-      | 'well'
-      | 'user'
-      | 'pipe'
-      | 'pipe-segment'
-      | 'capture'
-      | 'pump'
-      | 'reservoir'
-      | 'tower';
-    data: any;
-  } | null = null;
+  contextTarget: ContextTarget | null = null;
   map!: L.Map;
   private subscription: Subscription;
-  private state: {
-    wells: Well[];
-    pipes: Pipe[];
-    users: User[];
-    captures: any[];
-    pumps: any[];
-    reservoirs: any[];
-    towers: any[];
-    deletedObjects: { type: string; id: number | string }[];
-  } = {
+  private state: MapState = {
     wells: [],
     pipes: [],
     users: [],
@@ -74,33 +83,44 @@ export class MapComponent
     towers: [],
     deletedObjects: [],
   };
-  passports: {
-    id: number | string;
-    type:
-      | 'well'
-      | 'pipe'
-      | 'user'
-      | 'pipe-segment'
-      | 'capture'
-      | 'pump'
-      | 'reservoir'
-      | 'tower';
-    data: any;
-  }[] = [];
+  passports: Passport[] = [];
+
   pipeDiameter: number | null = null;
   showDiameterDialog: boolean = false;
   pipeDiameterInput: number | null = null;
   editMode: boolean = false;
   private dragState: any = null;
   private _dragActive = false;
-  private tempLine: { from: Point; to: Point } | null = null;
+  private tempLine: TempLine | null = null;
   @ViewChild('diameterInput') diameterInputRef?: ElementRef<HTMLInputElement>;
   private shouldFocusDiameterInput = false;
   private isMapReady = false;
   showObjectTypeDialog: boolean = false;
-  objectTypeDialogPosition: { x: number; y: number } = { x: 0, y: 0 };
+  objectTypeDialogPosition: DialogPosition = { x: 0, y: 0 };
+
   objectTypeDialogPoint: Point | null = null;
   private id_scheme: number | null = null;
+
+  private tempLineLayer: d3.Selection<
+    SVGLineElement,
+    unknown,
+    null,
+    undefined
+  > | null = null;
+
+  showStartObjectMenu = false;
+  startMenuPosition = { x: 0, y: 0 };
+  pendingPipeStartPoint: Point | null = null;
+  finishClickEvent: MouseEvent | null = null;
+
+  startObjectTypes = [
+    { id: 'well', label: 'Скважина' },
+    { id: 'user', label: 'Потребитель' },
+    { id: 'capture', label: 'Каптаж' },
+    { id: 'pump', label: 'Насос' },
+    { id: 'reservoir', label: 'Резервуар' },
+    { id: 'tower', label: 'Башня' },
+  ];
 
   constructor(
     private objectService: ObjectService,
@@ -120,101 +140,20 @@ export class MapComponent
     if (this.id_scheme) {
       this.loadSchemeById(this.id_scheme);
     }
+
+    window.addEventListener('keydown', this.handleKeyDown);
   }
 
   ngAfterViewInit() {
-    // создаём карту Leaflet
-    this.map = L.map('map', {
-      attributionControl: false,
-      zoomControl: false,
-    }).setView([55.827024, 49.132798], 15);
+    this.map = createMap('map');
+    addGoogleLayer(this.map);
+    ({ svg: this.svg, g: this.g } = createSvgLayer(this.map));
 
-    // подключаем слой Google карт
-    L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-      maxZoom: 19,
-      subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-      attribution: '',
-    }).addTo(this.map);
+    this.initMiddleMousePan();
+    this.initMapClickHandlers();
 
-    // добавляем SVG слой для D3
-    L.svg().addTo(this.map);
-    this.svg = d3.select(this.map.getPanes().overlayPane).select('svg');
-    this.g = this.svg.append('g').attr('class', 'leaflet-objects');
-
-    this.g
-      .attr('pointer-events', 'all')
-      .style('position', 'absolute')
-      .style('top', '0')
-      .style('left', '0')
-      .style('width', '100%')
-      .style('height', '100%');
-
-    let isMiddleDragging = false;
-    let lastMousePos: { x: number; y: number } | null = null;
-    const mapContainer = this.map.getContainer();
-
-    // обработка мышки (перемещение карты средней кнопкой, рисование труб)
-    mapContainer.addEventListener('contextmenu', (e: MouseEvent) => {
-      e.preventDefault();
-    });
-
-    mapContainer.addEventListener('mousedown', (e: MouseEvent) => {
-      if (e.button === 1) {
-        isMiddleDragging = true;
-        lastMousePos = { x: e.clientX, y: e.clientY };
-        mapContainer.style.cursor = 'grabbing';
-        e.preventDefault();
-      }
-    });
-
-    window.addEventListener('mousemove', (e: MouseEvent) => {
-      if (isMiddleDragging && lastMousePos) {
-        const dx = e.clientX - lastMousePos.x;
-        const dy = e.clientY - lastMousePos.y;
-        lastMousePos = { x: e.clientX, y: e.clientY };
-        const currentCenter = this.map.getCenter();
-        const pixelCenter = this.map.latLngToContainerPoint(currentCenter);
-        const newPixelCenter = L.point(pixelCenter.x - dx, pixelCenter.y - dy);
-        const newCenter = this.map.containerPointToLatLng(newPixelCenter);
-        this.map.panTo(newCenter, { animate: false });
-      } else if (this.isDrawingPipe && this.currentPipe.length >= 1) {
-        const latlng = this.map.mouseEventToLatLng(e);
-        this.tempLine = {
-          from: this.currentPipe[this.currentPipe.length - 1],
-          to: [latlng.lng, latlng.lat],
-        };
-        this.redrawAllPipes(this.state.pipes, this.state.users);
-      }
-    });
-
-    window.addEventListener('mouseup', (e: MouseEvent) => {
-      if (e.button === 1 && isMiddleDragging) {
-        isMiddleDragging = false;
-        mapContainer.style.cursor = this.selectedTool
-          ? 'crosshair'
-          : this.editMode
-          ? 'pointer'
-          : '';
-      }
-    });
-
-    // при клике по карте добавляем объект (скважина или труба)
-    this.map.on('click', (e: L.LeafletMouseEvent) => {
-      if (!this.selectedTool || this.editMode) {
-        this.contextMenuVisible = false;
-        return;
-      }
-      const point: Point = [e.latlng.lng, e.latlng.lat];
-      this.handleClickOnMap(e.originalEvent, point);
-    });
-
-    this.map.on('moveend zoomend', () => {
-      this.updateSvgTransform();
-      this.updateObjectPositions();
-    });
-
-    this.updateSvgTransform();
-    this.updateObjectPositions();
+    updateSvgTransform(this.map, this.svg);
+    updateObjectPositions(this.map, this.g);
 
     this.isMapReady = true;
     this.redrawAll();
@@ -239,76 +178,7 @@ export class MapComponent
     }
     window.removeEventListener('mousemove', this.onDragMove);
     window.removeEventListener('mouseup', this.onDragEnd);
-  }
-
-  // загружаем схему (скважины, трубы, потребители) через сервис
-  loadSchemeById(id_scheme: number) {
-    this.dataSchemeService.getSchemeData(id_scheme).subscribe({
-      next: (geojson) => {
-        // Скважины
-        const wells = (geojson.features || [])
-          .filter((f: any) => f.name_object_type === 'Скважина')
-          .map((f: any) => ({
-            id: f.id,
-            position: [
-              f.geometry.coordinates[0],
-              f.geometry.coordinates[1],
-            ] as [number, number],
-            visible: true,
-          }));
-
-        // Потребители
-        const users = (geojson.features || [])
-          .filter((f: any) => f.name_object_type === 'Потребитель')
-          .map((f: any) => ({
-            id: f.id,
-            position: [
-              f.geometry.coordinates[0],
-              f.geometry.coordinates[1],
-            ] as [number, number],
-            visible: true,
-          }));
-
-        // Сегменты труб
-        const pipeSegments = (geojson.features || []).filter(
-          (f: any) =>
-            f.name_object_type === 'Труба' && f.geometry.type === 'LineString'
-        );
-
-        // Счётчик для ID новых труб, если id нет
-        const maxPipeId = pipeSegments.reduce(
-          (max: number, seg: any) => Math.max(max, seg.id || 0),
-          0
-        );
-        this.objectService['pipeIdCounter'] = maxPipeId + 1;
-
-        // Создаём отдельную трубу для каждого сегмента
-        const pipes = pipeSegments.map((seg: any, index: any) => ({
-          id: seg.id || this.objectService['pipeIdCounter'] + index,
-          name: seg.properties?.Имя || `pipe_${index}`,
-          vertices: seg.geometry.coordinates as [number, number][],
-          userConnections: [],
-          visible: true,
-          diameter:
-            seg.properties?.['Диаметр'] || seg.properties?.diameter || 0,
-        }));
-
-        // Сохраняем состояние
-        this.objectService['state'].next({
-          wells,
-          pipes,
-          users,
-          captures: [],
-          pumps: [],
-          reservoirs: [],
-          towers: [],
-          deletedObjects: [],
-        });
-      },
-      error: (err) => {
-        console.error('Ошибка загрузки схемы:', err);
-      },
-    });
+    window.removeEventListener('keydown', this.handleKeyDown);
   }
 
   zoomIn() {
@@ -319,243 +189,386 @@ export class MapComponent
     this.map.zoomOut();
   }
 
-  updateSvgTransform() {
-    const bounds = this.map.getBounds();
-    const topLeft = this.map.latLngToLayerPoint(bounds.getNorthWest());
-    this.svg.attr('transform', `translate(${topLeft.x}, ${topLeft.y})`);
-  }
+  //Перемешение карты мышкой
+  private initMiddleMousePan() {
+    let isMiddleDragging = false;
+    let lastMousePos: { x: number; y: number } | null = null;
+    const mapContainer = this.map.getContainer();
 
-  updateObjectPositions() {
-    this.g.selectAll('g.well').attr('transform', (d: Well) => {
-      const p = this.map.latLngToLayerPoint(
-        L.latLng(d.position[1], d.position[0])
-      );
-      return `translate(${p.x}, ${p.y})`;
+    mapContainer.addEventListener('contextmenu', (e: MouseEvent) => {
+      e.preventDefault();
     });
 
-    this.g
-      .selectAll('rect.pipe-temp')
-      .attr(
-        'x',
-        (d: Point) => this.map.latLngToLayerPoint(L.latLng(d[1], d[0])).x - 6
-      )
-      .attr(
-        'y',
-        (d: Point) => this.map.latLngToLayerPoint(L.latLng(d[1], d[0])).y - 6
-      );
+    mapContainer.addEventListener('mousedown', (e: MouseEvent) => {
+      if (e.button === 1) {
+        isMiddleDragging = true;
+        lastMousePos = { x: e.clientX, y: e.clientY };
+        mapContainer.style.cursor = 'grabbing';
+        e.preventDefault();
+      }
+    });
 
-    this.g
-      .selectAll('line.pipe-temp, line.pipe-temp-dash')
-      .attr(
-        'x1',
-        (d: [Point, Point]) =>
-          this.map.latLngToLayerPoint(L.latLng(d[0][1], d[0][0])).x
-      )
-      .attr(
-        'y1',
-        (d: [Point, Point]) =>
-          this.map.latLngToLayerPoint(L.latLng(d[0][1], d[0][0])).y
-      )
-      .attr(
-        'x2',
-        (d: [Point, Point]) =>
-          this.map.latLngToLayerPoint(L.latLng(d[1][1], d[1][0])).x
-      )
-      .attr(
-        'y2',
-        (d: [Point, Point]) =>
-          this.map.latLngToLayerPoint(L.latLng(d[1][1], d[1][0])).y
-      );
+    window.addEventListener('mousemove', (e: MouseEvent) => {
+      if (isMiddleDragging && lastMousePos) {
+        const dx = e.clientX - lastMousePos.x;
+        const dy = e.clientY - lastMousePos.y;
+        lastMousePos = { x: e.clientX, y: e.clientY };
+        const currentCenter = this.map.getCenter();
+        const pixelCenter = this.map.latLngToContainerPoint(currentCenter);
+        const newPixelCenter = L.point(pixelCenter.x - dx, pixelCenter.y - dy);
+        const newCenter = this.map.containerPointToLatLng(newPixelCenter);
+        this.map.panTo(newCenter, { animate: false });
+      }
+    });
 
-    this.g
-      .selectAll('line.pipe-temp-overlay')
-      .attr(
-        'x1',
-        (d: [Point, Point]) =>
-          this.map.latLngToLayerPoint(L.latLng(d[0][1], d[0][0])).x
-      )
-      .attr(
-        'y1',
-        (d: [Point, Point]) =>
-          this.map.latLngToLayerPoint(L.latLng(d[0][1], d[0][0])).y
-      )
-      .attr(
-        'x2',
-        (d: [Point, Point]) =>
-          this.map.latLngToLayerPoint(L.latLng(d[1][1], d[1][0])).x
-      )
-      .attr(
-        'y2',
-        (d: [Point, Point]) =>
-          this.map.latLngToLayerPoint(L.latLng(d[1][1], d[1][0])).y
-      );
-
-    this.g
-      .selectAll('image.user-icon')
-      .attr(
-        'x',
-        (d: User) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
-            .x - 10
-      )
-      .attr(
-        'y',
-        (d: User) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
-            .y - 10
-      );
-    this.g
-      .selectAll('image.capture-icon')
-      .attr(
-        'x',
-        (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
-            .x - 12
-      )
-      .attr(
-        'y',
-        (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
-            .y - 12
-      );
-    this.g
-      .selectAll('image.pump-icon')
-      .attr(
-        'x',
-        (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
-            .x - 12
-      )
-      .attr(
-        'y',
-        (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
-            .y - 12
-      );
-    this.g
-      .selectAll('image.reservoir-icon')
-      .attr(
-        'x',
-        (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
-            .x - 12
-      )
-      .attr(
-        'y',
-        (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
-            .y - 12
-      );
-    this.g
-      .selectAll('image.tower-icon')
-      .attr(
-        'x',
-        (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
-            .x - 12
-      )
-      .attr(
-        'y',
-        (d: any) =>
-          this.map.latLngToLayerPoint(L.latLng(d.position[1], d.position[0]))
-            .y - 12
-      );
+    window.addEventListener('mouseup', (e: MouseEvent) => {
+      if (e.button === 1 && isMiddleDragging) {
+        isMiddleDragging = false;
+        mapContainer.style.cursor = this.selectedTool
+          ? 'crosshair'
+          : this.editMode
+          ? 'pointer'
+          : '';
+      }
+    });
   }
 
-  // выбираем инструмент: скважина или труба
-  // курсор меняется, включается режим рисования
-  selectTool(tool: 'well' | 'pipe') {
+  //Клики по карте
+  private initMapClickHandlers() {
+    this.map.on('click', (e: L.LeafletMouseEvent) => {
+      if (!this.selectedTool || this.editMode) {
+        this.contextMenuVisible = false;
+        return;
+      }
+      const point: Point = [e.latlng.lng, e.latlng.lat];
+      this.handleClickOnMap(e.originalEvent, point);
+    });
+
+    this.map.on('moveend zoomend', () => {
+      updateSvgTransform(this.map, this.svg);
+      updateObjectPositions(this.map, this.g);
+    });
+  }
+
+  //-----------------------------------
+  //-----------------------------------
+  //Загрузка схемы
+  //-----------------------------------
+  //-----------------------------------
+
+  // загружает данные схемы по ID через сервис и передаёт их на обработку.
+  loadSchemeById(id_scheme: number) {
+    this.dataSchemeService.getSchemeData(id_scheme).subscribe({
+      next: (geojson) => this.processSchemeData(geojson),
+      error: (err) => console.error('Ошибка загрузки схемы:', err),
+    });
+  }
+
+  //разбивает полученные данные на объекты, трубы и пользователей, а затем сохраняет состояние.
+  private processSchemeData(geojson: any) {
+    const features = geojson.features || [];
+
+    const wells = this.extractObjects(features, 'Скважина');
+    const users = this.extractObjects(features, 'Потребитель');
+    const pipeSegments = this.extractPipeSegments(features);
+    const pipes = this.buildPipes(pipeSegments);
+
+    this.pushState({ wells, users, pipes });
+  }
+
+  //выбирает из данных объекты нужного типа и формирует для них базовую структуру.
+  private extractObjects(features: any[], type: string) {
+    return features
+      .filter((f) => f.name_object_type === type)
+      .map((f) => ({
+        id: f.id,
+        position: [f.geometry.coordinates[0], f.geometry.coordinates[1]] as [
+          number,
+          number
+        ],
+        visible: true,
+      }));
+  }
+
+  //отбирает только сегменты труб с геометрией LineString.
+  private extractPipeSegments(features: any[]) {
+    return features.filter(
+      (f) => f.name_object_type === 'Труба' && f.geometry.type === 'LineString'
+    );
+  }
+
+  //создаёт объекты труб с уникальными ID, вершинами, диаметром и видимостью.
+  private buildPipes(pipeSegments: any[]) {
+    const maxPipeId = pipeSegments.reduce(
+      (max, seg) => Math.max(max, seg.id || 0),
+      0
+    );
+    this.objectService['pipeIdCounter'] = maxPipeId + 1;
+
+    return pipeSegments.map((seg, index) => ({
+      id: seg.id || this.objectService['pipeIdCounter'] + index,
+      name: seg.properties?.Имя || `Труба #${maxPipeId}`,
+      vertices: seg.geometry.coordinates as [number, number][],
+      diameter: seg.properties?.['Диаметр'] ?? seg.properties?.diameter ?? 0,
+      visible: true,
+    }));
+  }
+
+  private pushState(data: any) {
+    this.objectService['state'].next({
+      wells: data.wells,
+      pipes: data.pipes,
+      users: data.users,
+      captures: [],
+      pumps: [],
+      reservoirs: [],
+      towers: [],
+      deletedObjects: [],
+    });
+  }
+
+  //-----------------------------------
+  //-----------------------------------
+  //Включает или отключает инструмент карты и режим рисования труб.
+  //-----------------------------------
+  //-----------------------------------
+
+  //выбирает инструмент на карте (например, «труба» или «скважина»),
+  selectTool(tool: MapTool | null) {
     if (this.selectedTool === tool) {
-      this.selectedTool = null;
-      this.isDrawingPipe = false;
-      this.currentPipe = [];
-      this.currentPipeUsers = [];
-      this.tempLine = null;
-      this.redrawAllPipes(this.state.pipes, this.state.users);
-      this.map.dragging.enable();
-      this.map.getContainer().style.cursor = this.editMode ? 'pointer' : '';
-    } else {
-      this.selectedTool = tool;
-      this.isDrawingPipe = true;
-      this.currentPipe = [];
-      this.currentPipeUsers = [];
-      this.tempLine = null;
-      this.map.dragging.disable();
-      this.map.getContainer().style.cursor = 'crosshair';
+      this.resetTool();
+      return;
     }
+
+    this.editMode = false;
+    this.map.dragging.enable();
+    this.map.getContainer().style.cursor = '';
+    this.redrawAll();
+
+    this.selectedTool = tool;
+    this.isDrawingPipe = tool === 'pipe';
+    this.currentPipe = [];
+    this.tempLine = null;
+
+    this.map.dragging.disable();
+    this.map.getContainer().style.cursor = 'crosshair';
+  }
+
+  //сбрасывает выбранный инструмент, очищает временные трубы и линии,
+  private resetTool() {
+    this.selectedTool = null;
+    this.isDrawingPipe = false;
+    this.currentPipe = [];
+    this.tempLine = null;
+
+    this.g.selectAll('circle').attr('fill', 'blue');
+
+    this.redrawAllPipes(this.state.pipes, this.state.users);
+    this.map.dragging.enable();
+    this.map.getContainer().style.cursor = this.editMode ? 'pointer' : '';
   }
 
   // обработка клика по карте (добавляем объект или точку трубы)
   handleClickOnMap(event: MouseEvent, point: Point) {
-    if (this.selectedTool === 'pipe' && !this.isDrawingPipe) return;
-
-    if (this.selectedTool === 'pipe' && this.isDrawingPipe) {
-      this.handlePipeClick(point);
+    if (this.selectedTool === 'pipe') {
+      if (!this.isDrawingPipe) return;
+      this.handlePipeClick(point, event);
+      return;
     }
 
-    if (this.selectedTool === 'well') {
-      this.objectService.addWell(point);
-    }
+    const addObjectMap: Record<MapTool, (p: Point) => void> = {
+      pipe: () => {},
+      well: this.objectService.addWell.bind(this.objectService),
+      user: this.objectService.addUser.bind(this.objectService),
+      capture: this.objectService.addCapture.bind(this.objectService),
+      pump: this.objectService.addPump.bind(this.objectService),
+      reservoir: this.objectService.addReservoir.bind(this.objectService),
+      tower: this.objectService.addTower.bind(this.objectService),
+    };
+
+    addObjectMap[this.selectedTool!]?.(point);
   }
 
-  // рисуем скважину (круг + иконка), добавляем обработчики событий
-  addWell(well: Well) {
-    const wellSize = 30;
-    const radius = wellSize / 2;
+  //навешивает обработчики на объект: левый клик для перетаскивания
+  // в режиме редактирования, правый клик для открытия контекстного меню.
+  private attachObjectHandlers<T extends { position: [number, number] }>(
+    element: d3.Selection<any, T, any, any>,
+    type: 'well' | 'user' | 'capture' | 'pump' | 'reservoir' | 'tower'
+  ) {
+    element.on('mousedown', (event: MouseEvent, d: T) => {
+      console.log('mousedown', type, d, event.button);
+      if (this.editMode && event.button === 0) {
+        event.preventDefault();
+        event.stopPropagation();
 
-    const group = this.g
-      .append('g')
-      .attr('class', 'well')
-      .datum(well)
-      .on('click', (event: MouseEvent, d: Well) => {
-        if (this.selectedTool === 'pipe') {
-          event.stopPropagation();
-          this.startPipeFromWell(well.position);
-        }
-      })
-      .on('mousedown', (event: MouseEvent, d: Well) => {
-        if (this.editMode && event.button === 0) {
-          event.preventDefault();
-          event.stopPropagation();
-          this.startDragWell(event, d);
-        } else if (event.button === 2) {
-          event.preventDefault();
-          this.showContextMenu(event, 'well', d);
-        }
-      })
-      .on('mouseover', (event: MouseEvent) => {
-        if (this.editMode && event.currentTarget) {
-          d3.select(event.currentTarget as SVGGElement)
-            .select('circle')
-            .attr('fill', 'lightblue');
-        }
-      })
-      .on('mouseout', (event: MouseEvent) => {
-        if (this.editMode && event.currentTarget) {
-          d3.select(event.currentTarget as SVGGElement)
-            .select('circle')
-            .attr('fill', 'blue');
-        }
-      });
+        this.startDragSpecialObject(
+          event,
+          d,
+          type as 'well' | 'user' | 'capture' | 'pump' | 'reservoir' | 'tower'
+        );
+      } else if (event.button === 2) {
+        event.preventDefault();
+        this.showContextMenu(event, type, d);
+      }
+    });
+  }
 
-    group.append('circle').attr('r', radius).attr('fill', 'blue');
+  //создаёт графический элемент объекта на карте с иконкой
+  private addObject<T extends { position: [number, number] }>(
+    obj: T,
+    type: 'well' | 'user' | 'capture' | 'pump' | 'reservoir' | 'tower',
+    iconUrl: string,
+    size = 36
+  ) {
+    const r = size / 2;
+    const group = this.g.append('g').attr('class', type).datum(obj);
+
+    this.attachObjectHandlers(group, type);
 
     group
       .append('image')
-      .attr('xlink:href', 'assets/data/icon/well2.png')
-      .attr('x', -radius)
-      .attr('y', -radius)
-      .attr('width', wellSize)
-      .attr('height', wellSize);
+      .attr('class', `${type}-icon`)
+      .attr('xlink:href', iconUrl)
+      .attr('x', -r)
+      .attr('y', -r)
+      .attr('width', size)
+      .attr('height', size);
 
-    this.updateObjectPositions();
+    updateObjectPositions(this.map, this.g);
+  }
+
+  //добавляет на карту скважину с иконкой т тд
+  addWell(well: Well) {
+    this.addObject(well, 'well', 'assets/data/icon/well2.png', 24);
+  }
+
+  addUser(user: User) {
+    this.addObject(user, 'user', 'assets/data/icon/user.png');
+  }
+
+  addCapture(capture: Capture) {
+    this.addObject(capture, 'capture', 'assets/data/icon/Каптаж.png');
+  }
+
+  addPump(pump: Pump) {
+    this.addObject(pump, 'pump', 'assets/data/icon/Насос.png');
+  }
+
+  addReservoir(reservoir: Reservoir) {
+    this.addObject(
+      reservoir,
+      'reservoir',
+      'assets/data/icon/контр-резервуар.png'
+    );
+  }
+
+  addTower(tower: Tower) {
+    this.addObject(tower, 'tower', 'assets/data/icon/Насос.png');
+  }
+
+  // Открывает контекстное меню создания объекта (скважина, потребитель и т.д.)
+  // в точке клика и сохраняет координаты для будущего начала трубы.
+  showStartObjectCreationMenu(point: Point, event: MouseEvent) {
+    this.pendingPipeStartPoint = point;
+    this.startMenuPosition = { x: event.clientX, y: event.clientY };
+    this.showStartObjectMenu = true;
+  }
+
+  //Создаёт выбранный объект и сразу запускает рисование новой трубы из этой точки.
+  selectStartObject(type: string) {
+    if (!this.pendingPipeStartPoint) return;
+
+    let obj: any;
+
+    switch (type) {
+      case 'well':
+        obj = this.objectService.addWell(this.pendingPipeStartPoint);
+        break;
+      case 'user':
+        obj = this.objectService.addUser(this.pendingPipeStartPoint);
+        break;
+      case 'capture':
+        obj = this.objectService.addCapture(this.pendingPipeStartPoint);
+        break;
+      case 'pump':
+        obj = this.objectService.addPump(this.pendingPipeStartPoint);
+        break;
+      case 'reservoir':
+        obj = this.objectService.addReservoir(this.pendingPipeStartPoint);
+        break;
+      case 'tower':
+        obj = this.objectService.addTower(this.pendingPipeStartPoint);
+        break;
+    }
+
+    this.showStartObjectMenu = false;
+
+    if (!this.isDrawingPipe && this.currentPipe.length > 1) {
+      this.finalizePipe();
+      this.pendingPipeStartPoint = null;
+      return;
+    }
+
+    this.startPipeFromWell(this.pendingPipeStartPoint);
+    this.isDrawingPipe = true;
+    this.currentPipe = [this.pendingPipeStartPoint];
+    this.drawPipeVertex(this.pendingPipeStartPoint, false);
+
+    this.redrawAllPipes(this.state.pipes, this.state.users);
+
+    this.pendingPipeStartPoint = null;
   }
 
   // логика рисования трубы: добавляем вершины, открываем диалог для диаметра
-  handlePipeClick(point: Point) {
+  handlePipeClick(point: Point, event?: MouseEvent) {
     if (!this.isDrawingPipe) return;
 
+    const snapDistancePx = 15; // радиус привязки в пикселях на экране
+
+    // объединяем все точки для привязки
+    const snapPoints: Point[] = [
+      ...this.state.wells.map((w) => w.position),
+      ...this.state.users.map((u) => u.position),
+      ...this.state.pipes.flatMap((p) => p.vertices),
+      ...(this.state.captures || []).map((c) => c.position),
+      ...(this.state.pumps || []).map((p) => p.position),
+      ...(this.state.reservoirs || []).map((r) => r.position),
+      ...(this.state.towers || []).map((t) => t.position),
+    ];
+
+    let closestPoint: Point | null = null;
+    let minDistance = Infinity;
+
+    for (const snapPoint of snapPoints) {
+      const screenPoint = this.map.latLngToLayerPoint(
+        L.latLng(point[1], point[0])
+      );
+      const screenSnap = this.map.latLngToLayerPoint(
+        L.latLng(snapPoint[1], snapPoint[0])
+      );
+      const dx = screenPoint.x - screenSnap.x;
+      const dy = screenPoint.y - screenSnap.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < snapDistancePx && dist < minDistance) {
+        minDistance = dist;
+        closestPoint = snapPoint;
+      }
+    }
+
+    // если нашли близкую точку, привязываем, иначе создаем новую
+    if (closestPoint) {
+      point = [...closestPoint] as Point;
+    }
+
     if (this.currentPipe.length === 0) {
+      // если рядом НИЧЕГО нет — покажем меню создания объекта
+      if (!closestPoint) {
+        this.showStartObjectCreationMenu(point, event as MouseEvent);
+        return;
+      }
+
+      // если есть привязка — старт стандартный
       this.currentPipe.push(point);
       this.drawPipeVertex(point, false);
       return;
@@ -566,6 +579,7 @@ export class MapComponent
       this.skipNextSamePointCheck = false;
     } else if (this.isSamePoint(point, lastPoint)) {
       if (this.currentPipe.length > 1) {
+        this.finishClickEvent = event as MouseEvent;
         this.showDiameterDialog = true;
         this.pipeDiameterInput = null;
         this.isDrawingPipe = false;
@@ -574,6 +588,7 @@ export class MapComponent
       }
       return;
     }
+
     this.currentPipe.push(point);
     this.redrawAllPipes(this.state.pipes, this.state.users);
   }
@@ -581,29 +596,80 @@ export class MapComponent
   // завершает рисование трубы и сохраняет её
   finalizePipe() {
     if (this.currentPipe.length > 1 && this.pipeDiameter != null) {
-      const userConnections = [...this.currentPipeUsers];
+      // ищем ближайший объект к последней точке трубы
+      const lastPoint = this.currentPipe[this.currentPipe.length - 1];
 
-      if (userConnections.length === 0) {
-        const last = this.currentPipe[this.currentPipe.length - 1];
-        const prev = this.currentPipe[this.currentPipe.length - 2];
-        this.objectService.addUser(last);
-        userConnections.push({ from: prev, to: last });
+      const snapPoints: Point[] = [
+        ...this.state.wells.map((w) => w.position),
+        ...this.state.users.map((u) => u.position),
+        ...this.state.pipes.flatMap((p) => p.vertices),
+        ...(this.state.captures || []).map((c) => c.position),
+        ...(this.state.pumps || []).map((p) => p.position),
+        ...(this.state.reservoirs || []).map((r) => r.position),
+        ...(this.state.towers || []).map((t) => t.position),
+      ];
+
+      let isNearObject = false;
+      for (const sp of snapPoints) {
+        if (this.getDistance(lastPoint, sp) < 0.00005) {
+          isNearObject = true;
+          break;
+        }
       }
 
-      this.objectService.addPipe(
-        [...this.currentPipe],
-        userConnections,
-        this.pipeDiameter
-      );
+      // если рядом ничего нет — показываем меню выбора объекта
+      if (!isNearObject) {
+        this.pendingPipeStartPoint = lastPoint;
+
+        if (this.finishClickEvent) {
+          this.startMenuPosition = {
+            x: this.finishClickEvent.clientX,
+            y: this.finishClickEvent.clientY,
+          };
+        }
+
+        this.showStartObjectMenu = true;
+        this.finishClickEvent = null; // очистили
+        return;
+      }
+
+      this.objectService.addPipe([...this.currentPipe], this.pipeDiameter);
     }
 
     this.currentPipe = [];
-    this.currentPipeUsers = [];
     this.pipeDiameter = null;
     this.showDiameterDialog = false;
-    this.isDrawingPipe = false;
+    this.isDrawingPipe = this.selectedTool === 'pipe';
     this.tempLine = null;
     this.redrawAllPipes(this.state.pipes, this.state.users);
+  }
+
+  //вычисляет расстояние между двумя точками.
+  getDistance(p1: Point, p2: Point) {
+    const dx = p1[0] - p2[0];
+    const dy = p1[1] - p2[1];
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  //Если пользователь нажал Escape — отменяет рисование трубы.
+  handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      this.cancelPipeDrawing();
+    }
+  };
+
+  //отменяет текущее рисование трубы и сбрасывает временные данные.
+  cancelPipeDrawing() {
+    if (!this.isDrawingPipe) return;
+
+    this.currentPipe = [];
+    this.tempLine = null;
+    this.showDiameterDialog = false;
+
+    // перерисовываем, чтобы убрать временные линии
+    this.redrawAllPipes(this.state.pipes, this.state.users);
+
+    console.log('Pipe drawing cancelled (ESC, only cleared current pipe)');
   }
 
   handleVertexRightClick(point: Point) {
@@ -634,63 +700,58 @@ export class MapComponent
   }
 
   drawPipeVertex(point: Point, finalized: boolean) {
-    if (this.state.wells.some((w) => this.isSamePoint(w.position, point))) {
+    if (this.editMode) {
+      // редактирование: квадраты
+      if (this.state.wells.some((w) => this.isSamePoint(w.position, point)))
+        return;
+      if (
+        finalized &&
+        this.state.users.some((u) => this.isSamePoint(u.position, point))
+      )
+        return;
+
+      const size = 12;
+      const vertexIndex = this.findPipeVertexIndex(point);
+      const pipeId = this.findPipeIdByVertex(point);
+
+      this.g
+        .append('rect')
+        .attr('class', 'pipe-temp')
+        .datum(point)
+        .attr('width', size)
+        .attr('height', size)
+        .attr('fill', finalized ? 'red' : 'white')
+        .attr('stroke', 'black')
+        .attr('stroke-width', 2)
+        .style('cursor', 'grab')
+        .on('mousedown', (event: MouseEvent) => {
+          if (event.button === 0 && pipeId !== null && vertexIndex !== null) {
+            event.preventDefault();
+            event.stopPropagation();
+            this.startDragPipeVertex(event, pipeId, vertexIndex);
+          } else if (event.button === 2) {
+            event.preventDefault();
+            this.handleVertexRightClick(point);
+          }
+        });
+
       return;
     }
-    if (
-      finalized &&
-      this.state.users.some((u) => this.isSamePoint(u.position, point))
-    ) {
-      return;
+
+    // просмотр: рисуем синие круги, если вершин >= 3
+    const verticesAtPoint = this.state.pipes
+      .flatMap((pipe) => pipe.vertices)
+      .filter((v) => this.isSamePoint(v, point));
+
+    if (verticesAtPoint.length > 2) {
+      this.g
+        .append('circle')
+        .attr('class', 'pipe-circle')
+        .datum(point)
+        .attr('r', 5) // меньший радиус
+        .attr('fill', 'blue') // синий цвет
+        .attr('stroke', 'none'); // без обводки
     }
-
-    const size = 12;
-    const vertexIndex = this.findPipeVertexIndex(point);
-    const pipeId = this.findPipeIdByVertex(point);
-
-    this.g
-      .append('rect')
-      .attr('class', 'pipe-temp')
-      .datum(point)
-      .attr('width', size)
-      .attr('height', size)
-      .attr('fill', finalized ? 'red' : 'white')
-      .attr('stroke', 'black')
-      .attr('stroke-width', 2)
-      .style('cursor', this.editMode ? 'grab' : 'pointer')
-      .on('mousedown', (event: MouseEvent) => {
-        if (
-          this.editMode &&
-          event.button === 0 &&
-          pipeId !== null &&
-          vertexIndex !== null
-        ) {
-          event.preventDefault();
-          event.stopPropagation();
-          this.startDragPipeVertex(event, pipeId, vertexIndex);
-        } else if (event.button === 2) {
-          event.preventDefault();
-          this.handleVertexRightClick(point);
-        }
-      })
-      .on('mouseover', (event: MouseEvent) => {
-        if (this.editMode && event.currentTarget) {
-          d3.select(event.currentTarget as SVGRectElement).attr(
-            'fill',
-            finalized ? 'pink' : 'lightgray'
-          );
-        }
-      })
-      .on('mouseout', (event: MouseEvent) => {
-        if (this.editMode && event.currentTarget) {
-          d3.select(event.currentTarget as SVGRectElement).attr(
-            'fill',
-            finalized ? 'red' : 'white'
-          );
-        }
-      });
-
-    this.updateObjectPositions();
   }
 
   drawLineSegment(from: Point, to: Point, isDashed: boolean = false) {
@@ -766,219 +827,141 @@ export class MapComponent
             'transparent'
           );
         }
-      })
-      .call(() => this.updateObjectPositions());
+      });
+    updateObjectPositions(this.map, this.g);
   }
 
-  // перерисовываем все трубы, вершины и пользователей
-  // сначала чистим старые, потом рисуем новые
-  redrawAllPipes(pipes: Pipe[], users: User[]) {
+  private clearTempAndIconsLayer() {
     this.g
       .selectAll(
         '.pipe-temp, .pipe-temp-overlay, .pipe-temp-dash, .user-icon, .capture-icon, .pump-icon, .reservoir-icon, .tower-icon'
       )
       .remove();
+  }
 
+  private renderPipes(pipes: Pipe[]) {
     pipes.forEach((pipe) => {
       if (!pipe.visible) return;
+
+      // основные сегменты трубы
       pipe.vertices.forEach((pt, i) => {
         if (i > 0) {
           this.drawLineSegment(pipe.vertices[i - 1], pt, false);
         }
       });
-      pipe.userConnections.forEach((conn) => {
-        this.drawLineSegment(conn.from, conn.to, false);
-      });
     });
+  }
 
+  private renderPipeVertices(pipes: Pipe[]) {
     pipes.forEach((pipe) => {
       if (!pipe.visible) return;
+
       pipe.vertices.forEach((pt) => {
         this.drawPipeVertex(pt, true);
       });
     });
+  }
 
-    users.forEach((user) => {
-      if (!user.visible) return;
-      const pixel = this.map.latLngToLayerPoint(
-        L.latLng(user.position[1], user.position[0])
-      );
-      this.g
-        .append('image')
-        .attr('class', 'user-icon')
-        .datum(user)
-        .attr('xlink:href', 'assets/data/icon/user.png')
-        .attr('x', pixel.x - 10)
-        .attr('y', pixel.y - 10)
-        .attr('width', 20)
-        .attr('height', 20)
-        .style('cursor', this.editMode ? 'grab' : 'pointer')
-        .on('mousedown', (event: MouseEvent, d: User) => {
-          if (this.editMode && event.button === 0) {
-            event.preventDefault();
-            event.stopPropagation();
-            this.startDragUser(event, d);
-          } else if (event.button === 2) {
-            event.preventDefault();
-            this.showContextMenu(event, 'user', d);
-          }
-        })
-        .on('mouseover', (event: MouseEvent) => {
-          if (this.editMode && event.currentTarget) {
-            d3.select(event.currentTarget as SVGImageElement).attr(
-              'opacity',
-              0.7
-            );
-          }
-        })
-        .on('mouseout', (event: MouseEvent) => {
-          if (this.editMode && event.currentTarget) {
-            d3.select(event.currentTarget as SVGImageElement).attr(
-              'opacity',
-              1
-            );
-          }
-        });
-    });
-
-    this.currentPipe.forEach((pt, i) => {
-      if (i > 0) {
-        this.drawLineSegment(this.currentPipe[i - 1], pt, true);
-      }
-    });
-    this.currentPipe.forEach((pt) => {
-      this.drawPipeVertex(pt, false);
-    });
-
-    this.currentPipeUsers.forEach((conn) => {
-      this.drawLineSegment(conn.from, conn.to, true);
-      const pixel = this.map.latLngToLayerPoint(
-        L.latLng(conn.to[1], conn.to[0])
-      );
-      this.g
-        .append('image')
-        .attr('class', 'user-icon')
-        .datum(conn.to)
-        .attr('xlink:href', 'assets/data/icon/user.png')
-        .attr('x', pixel.x - 10)
-        .attr('y', pixel.y - 10)
-        .attr('width', 20)
-        .attr('height', 20);
-    });
-
-    if (this.tempLine) {
-      this.drawLineSegment(this.tempLine.from, this.tempLine.to, true);
+  private renderCurrentPipe() {
+    // обычные сегменты между точками
+    for (let i = 1; i < this.currentPipe.length; i++) {
+      this.drawLineSegment(this.currentPipe[i - 1], this.currentPipe[i], true);
     }
 
-    (this.state.captures || []).forEach((obj: any) => {
-      if (!obj.visible) return;
-      const pixel = this.map.latLngToLayerPoint(
-        L.latLng(obj.position[1], obj.position[0])
-      );
-      this.g
-        .append('image')
-        .attr('class', 'capture-icon')
-        .datum(obj)
-        .attr('xlink:href', 'assets/data/images/Каптаж.png')
-        .attr('x', pixel.x - 12)
-        .attr('y', pixel.y - 12)
-        .attr('width', 24)
-        .attr('height', 24)
-        .style('cursor', this.editMode ? 'grab' : 'pointer')
-        .on('mousedown', (event: MouseEvent, d: any) => {
-          if (this.editMode && event.button === 0) {
-            event.preventDefault();
-            event.stopPropagation();
-            this.startDragSpecialObject(event, d, 'capture');
-          } else if (event.button === 2) {
-            event.preventDefault();
-            this.showContextMenu(event, 'capture', d);
-          }
-        });
-    });
+    // вершины
+    for (const pt of this.currentPipe) {
+      this.drawPipeVertex(pt, false);
+    }
+  }
 
-    (this.state.pumps || []).forEach((obj: any) => {
-      if (!obj.visible) return;
-      const pixel = this.map.latLngToLayerPoint(
-        L.latLng(obj.position[1], obj.position[0])
-      );
-      this.g
-        .append('image')
-        .attr('class', 'pump-icon')
-        .datum(obj)
-        .attr('xlink:href', 'assets/data/images/Насос.png')
-        .attr('x', pixel.x - 12)
-        .attr('y', pixel.y - 12)
-        .attr('width', 24)
-        .attr('height', 24)
-        .style('cursor', this.editMode ? 'grab' : 'pointer')
-        .on('mousedown', (event: MouseEvent, d: any) => {
-          if (this.editMode && event.button === 0) {
-            event.preventDefault();
-            event.stopPropagation();
-            this.startDragSpecialObject(event, d, 'pump');
-          } else if (event.button === 2) {
-            event.preventDefault();
-            this.showContextMenu(event, 'pump', d);
-          }
-        });
-    });
+  // перерисовываем все трубы, вершины и пользователей
+  // сначала чистим старые, потом рисуем новые
+  redrawAllPipes(pipes: Pipe[], users: User[]) {
+    this.clearTempAndIconsLayer();
 
-    (this.state.reservoirs || []).forEach((obj: any) => {
-      if (!obj.visible) return;
-      const pixel = this.map.latLngToLayerPoint(
-        L.latLng(obj.position[1], obj.position[0])
-      );
-      this.g
-        .append('image')
-        .attr('class', 'reservoir-icon')
-        .datum(obj)
-        .attr('xlink:href', 'assets/data/images/контр-резервуар.png')
-        .attr('x', pixel.x - 12)
-        .attr('y', pixel.y - 12)
-        .attr('width', 24)
-        .attr('height', 24)
-        .style('cursor', this.editMode ? 'grab' : 'pointer')
-        .on('mousedown', (event: MouseEvent, d: any) => {
-          if (this.editMode && event.button === 0) {
-            event.preventDefault();
-            event.stopPropagation();
-            this.startDragSpecialObject(event, d, 'reservoir');
-          } else if (event.button === 2) {
-            event.preventDefault();
-            this.showContextMenu(event, 'reservoir', d);
-          }
-        });
-    });
+    this.renderPipes(pipes);
+    this.renderPipeVertices(pipes);
 
-    (this.state.towers || []).forEach((obj: any) => {
-      if (!obj.visible) return;
-      const pixel = this.map.latLngToLayerPoint(
-        L.latLng(obj.position[1], obj.position[0])
-      );
-      this.g
-        .append('image')
-        .attr('class', 'tower-icon')
-        .datum(obj)
-        .attr('xlink:href', 'assets/data/images/Водонапорная башня.png')
-        .attr('x', pixel.x - 12)
-        .attr('y', pixel.y - 12)
-        .attr('width', 24)
-        .attr('height', 24)
-        .style('cursor', this.editMode ? 'grab' : 'pointer')
-        .on('mousedown', (event: MouseEvent, d: any) => {
-          if (this.editMode && event.button === 0) {
-            event.preventDefault();
-            event.stopPropagation();
-            this.startDragSpecialObject(event, d, 'tower');
-          } else if (event.button === 2) {
-            event.preventDefault();
-            this.showContextMenu(event, 'tower', d);
-          }
-        });
-    });
+    this.renderCurrentPipe();
 
-    this.updateObjectPositions();
+    // рендер всех специальных объектов
+    (this.state.captures || []).forEach((obj) =>
+      this.renderSpecialObject(
+        obj,
+        'capture-icon',
+        'assets/data/images/Каптаж.png',
+        'capture'
+      )
+    );
+    (this.state.pumps || []).forEach((obj) =>
+      this.renderSpecialObject(
+        obj,
+        'pump-icon',
+        'assets/data/images/Насос.png',
+        'pump'
+      )
+    );
+    (this.state.reservoirs || []).forEach((obj) =>
+      this.renderSpecialObject(
+        obj,
+        'reservoir-icon',
+        'assets/data/images/контр-резервуар.png',
+        'reservoir'
+      )
+    );
+    (this.state.towers || []).forEach((obj) =>
+      this.renderSpecialObject(
+        obj,
+        'tower-icon',
+        'assets/data/images/Водонапорная башня.png',
+        'tower'
+      )
+    );
+
+    (users || []).forEach((user) =>
+      this.renderSpecialObject(
+        user,
+        'user-icon',
+        'assets/data/icon/user.png',
+        'user'
+      )
+    );
+
+    updateObjectPositions(this.map, this.g);
+  }
+
+  private renderSpecialObject(
+    obj: any,
+    iconClass: string,
+    iconUrl: string,
+    type: 'capture' | 'pump' | 'reservoir' | 'tower' | 'user'
+  ) {
+    if (!obj.visible) return;
+
+    const pixel = this.map.latLngToLayerPoint(
+      L.latLng(obj.position[1], obj.position[0])
+    );
+
+    this.g
+      .append('image')
+      .attr('class', iconClass)
+      .datum(obj)
+      .attr('xlink:href', iconUrl)
+      .attr('x', pixel.x - 12)
+      .attr('y', pixel.y - 12)
+      .attr('width', 24)
+      .attr('height', 24)
+      .style('cursor', this.editMode ? 'grab' : 'pointer')
+      .on('mousedown', (event: MouseEvent, d: any) => {
+        if (event.button === 0 && this.editMode) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.startDragSpecialObject(event, d, type);
+        } else if (event.button === 2) {
+          event.preventDefault();
+          this.showContextMenu(event, type, d);
+        }
+      });
   }
 
   // показываем контекстное меню (ПКМ) для объекта
@@ -1125,11 +1108,12 @@ export class MapComponent
   // перерисовываем все объекты на карте заново
   redrawAll() {
     this.g.selectAll('*').remove();
-    this.state.wells.forEach((well) => {
-      if (well.visible) {
-        this.addWell(well);
-      }
-    });
+    this.state.wells.forEach((w) => w.visible && this.addWell(w));
+    this.state.users.forEach((u) => u.visible && this.addUser(u));
+    this.state.captures.forEach((c) => c.visible && this.addCapture(c));
+    this.state.pumps.forEach((p) => p.visible && this.addPump(p));
+    this.state.reservoirs.forEach((r) => r.visible && this.addReservoir(r));
+    this.state.towers.forEach((t) => t.visible && this.addTower(t));
     this.redrawAllPipes(this.state.pipes, this.state.users);
   }
 
@@ -1138,7 +1122,6 @@ export class MapComponent
     if (this.selectedTool === 'pipe' && !this.isDrawingPipe) {
       this.isDrawingPipe = true;
       this.currentPipe = [point];
-      this.currentPipeUsers = [];
       this.drawPipeVertex(point, false);
       this.skipNextSamePointCheck = true;
     }
@@ -1159,7 +1142,6 @@ export class MapComponent
       this.selectedTool = null;
       this.isDrawingPipe = false;
       this.currentPipe = [];
-      this.currentPipeUsers = [];
       this.tempLine = null;
       this.map.dragging.disable();
       this.map.getContainer().style.cursor = 'pointer';
@@ -1261,79 +1243,80 @@ export class MapComponent
       return;
     }
 
-    if (this.dragState.type === 'well') {
-      this.objectService.moveWell(this.dragState.id, newPos);
-      this.redrawAllPipes(this.state.pipes, this.state.users);
-    } else if (this.dragState.type === 'user') {
-      this.objectService.moveUser(this.dragState.id, newPos);
-      this.redrawAllPipes(this.state.pipes, this.state.users);
-      // Обработка перетаскивания вершины — единый, ненамутирующий блок
-    } else if (this.dragState.type === 'vertex') {
-      const draggedPipe = this.state.pipes.find(
-        (p) => p.id === this.dragState.pipeId
-      );
-      if (!draggedPipe) return;
+    switch (this.dragState.type) {
+      case 'well':
+        this.objectService.moveWell(this.dragState.id, newPos);
+        break;
+      case 'user':
+        this.objectService.moveUser(this.dragState.id, newPos);
+        break;
+      case 'capture':
+        this.objectService.moveCapture(this.dragState.id, newPos);
+        break;
+      case 'pump':
+        this.objectService.movePump(this.dragState.id, newPos);
+        break;
+      case 'reservoir':
+        this.objectService.moveReservoir(this.dragState.id, newPos);
+        break;
+      case 'tower':
+        this.objectService.moveTower(this.dragState.id, newPos);
+        break;
+      case 'vertex':
+        const draggedPipe = this.state.pipes.find(
+          (p) => p.id === this.dragState.pipeId
+        );
+        if (!draggedPipe) return;
 
-      const vertexIndex = this.dragState.vertexIndex;
-      const draggedVertex = draggedPipe.vertices[vertexIndex];
-      if (!draggedVertex) return;
+        const vertexIndex = this.dragState.vertexIndex;
+        const draggedVertex = draggedPipe.vertices[vertexIndex];
+        if (!draggedVertex) return;
 
-      // новое положение вершины — вызываем функцию, которая двигает все совпадающие вершины
-      this.objectService.movePipeVertex(draggedVertex, newPos);
+        // новое положение вершины — вызываем функцию, которая двигает все совпадающие вершины
+        this.objectService.movePipeVertex(draggedVertex, newPos);
+        break;
+      case 'segment':
+        const pipe = this.state.pipes.find(
+          (p) => p.id === this.dragState.pipeId
+        );
+        if (!pipe) return;
 
-      // мгновенное визуальное обновление
-      this.redrawAllPipes(this.state.pipes, this.state.users);
-    } else if (this.dragState.type === 'segment') {
-      const pipe = this.state.pipes.find((p) => p.id === this.dragState.pipeId);
-      if (!pipe) return;
+        const { fromIndex, toIndex } = this.dragState;
 
-      const { fromIndex, toIndex } = this.dragState;
+        // Считаем delta относительно последнего события
+        const delta: Point = [
+          newPos[0] - this.dragState.initialCenter[0],
+          newPos[1] - this.dragState.initialCenter[1],
+        ];
 
-      // Считаем delta относительно последнего события
-      const delta: Point = [
-        newPos[0] - this.dragState.initialCenter[0],
-        newPos[1] - this.dragState.initialCenter[1],
-      ];
+        // Собираем все вершины, которые нужно двигать
+        const verticesToMove: Set<Point> = new Set();
+        verticesToMove.add(pipe.vertices[fromIndex]);
+        verticesToMove.add(pipe.vertices[toIndex]);
 
-      // Собираем все вершины, которые нужно двигать
-      const verticesToMove: Set<Point> = new Set();
-      verticesToMove.add(pipe.vertices[fromIndex]);
-      verticesToMove.add(pipe.vertices[toIndex]);
-
-      this.state.pipes.forEach((p) => {
-        p.vertices.forEach((v) => {
-          if (
-            this.isSamePoint(v, pipe.vertices[fromIndex]) ||
-            this.isSamePoint(v, pipe.vertices[toIndex])
-          ) {
-            verticesToMove.add(v);
-          }
+        this.state.pipes.forEach((p) => {
+          p.vertices.forEach((v) => {
+            if (
+              this.isSamePoint(v, pipe.vertices[fromIndex]) ||
+              this.isSamePoint(v, pipe.vertices[toIndex])
+            ) {
+              verticesToMove.add(v);
+            }
+          });
         });
-      });
 
-      // Применяем delta ко всем вершинам одновременно
-      verticesToMove.forEach((v) => {
-        v[0] += delta[0];
-        v[1] += delta[1];
-      });
+        // Применяем delta ко всем вершинам одновременно
+        verticesToMove.forEach((v) => {
+          v[0] += delta[0];
+          v[1] += delta[1];
+        });
 
-      // обновляем центр для следующего события движения
-      this.dragState.initialCenter = newPos;
-
-      this.redrawAllPipes(this.state.pipes, this.state.users);
-    } else if (this.dragState.type === 'capture') {
-      this.objectService.moveCapture(this.dragState.id, newPos);
-      this.redrawAllPipes(this.state.pipes, this.state.users);
-    } else if (this.dragState.type === 'pump') {
-      this.objectService.movePump(this.dragState.id, newPos);
-      this.redrawAllPipes(this.state.pipes, this.state.users);
-    } else if (this.dragState.type === 'reservoir') {
-      this.objectService.moveReservoir(this.dragState.id, newPos);
-      this.redrawAllPipes(this.state.pipes, this.state.users);
-    } else if (this.dragState.type === 'tower') {
-      this.objectService.moveTower(this.dragState.id, newPos);
-      this.redrawAllPipes(this.state.pipes, this.state.users);
+        // обновляем центр для следующего события движения
+        this.dragState.initialCenter = newPos;
+        break;
     }
+    updateObjectPositions(this.map, this.g);
+    this.redrawAllPipes(this.state.pipes, this.state.users);
   };
 
   // завершаем перетаскивание
@@ -1417,11 +1400,8 @@ export class MapComponent
     } else if (type === 'tower') {
       this.objectService.addTower(point);
     }
-    if (type === 'user' && this.currentPipe.length > 1) {
-      this.currentPipeUsers.push({
-        from: this.currentPipe[this.currentPipe.length - 2],
-        to: point,
-      });
+    if (type === 'user') {
+      this.objectService.addUser(point);
     }
     this.showObjectTypeDialog = false;
     this.objectTypeDialogPoint = null;
@@ -1432,7 +1412,7 @@ export class MapComponent
   startDragSpecialObject(
     event: MouseEvent,
     obj: any,
-    type: 'capture' | 'pump' | 'reservoir' | 'tower'
+    type: 'capture' | 'pump' | 'reservoir' | 'tower' | 'user' | 'well'
   ) {
     event.stopPropagation();
     this.map.dragging.disable();
@@ -1441,7 +1421,8 @@ export class MapComponent
     window.addEventListener('mousemove', this.onDragMove);
     window.addEventListener('mouseup', this.onDragEnd);
     if (event.currentTarget) {
-      d3.select(event.currentTarget as SVGImageElement).attr('opacity', 0.7);
+      const el = d3.select(event.currentTarget as SVGGElement).select('image'); // выбираем изображение внутри <g>
+      el.attr('opacity', 0.7); // или другой стиль для визуальной индикации drag
     }
   }
 
