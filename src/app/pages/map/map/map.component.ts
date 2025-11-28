@@ -118,8 +118,8 @@ export class MapComponent
     { id: 'user', label: 'Потребитель' },
     { id: 'capture', label: 'Каптаж' },
     { id: 'pump', label: 'Насос' },
-    { id: 'reservoir', label: 'Резервуар' },
-    { id: 'tower', label: 'Башня' },
+    { id: 'reservoir', label: 'Контр-резервуар' },
+    { id: 'tower', label: 'Водонапорная башня' },
   ];
 
   constructor(
@@ -270,10 +270,23 @@ export class MapComponent
 
     const wells = this.extractObjects(features, 'Скважина');
     const users = this.extractObjects(features, 'Потребитель');
+    const captures = this.extractObjects(features, 'Каптаж');
+    const pumps = this.extractObjects(features, 'Насос');
+    const reservoirs = this.extractObjects(features, 'Контр-резервуар');
+    const towers = this.extractObjects(features, 'Водонапорная башня');
+
     const pipeSegments = this.extractPipeSegments(features);
     const pipes = this.buildPipes(pipeSegments);
 
-    this.pushState({ wells, users, pipes });
+    this.pushState({
+      wells,
+      users,
+      captures,
+      pumps,
+      reservoirs,
+      towers,
+      pipes,
+    });
   }
 
   //выбирает из данных объекты нужного типа и формирует для них базовую структуру.
@@ -319,10 +332,10 @@ export class MapComponent
       wells: data.wells,
       pipes: data.pipes,
       users: data.users,
-      captures: [],
-      pumps: [],
-      reservoirs: [],
-      towers: [],
+      captures: data.captures,
+      pumps: data.pumps,
+      reservoirs: data.reservoirs,
+      towers: data.towers,
       deletedObjects: [],
     });
   }
@@ -466,6 +479,12 @@ export class MapComponent
     this.addObject(tower, 'tower', 'assets/data/icon/Насос.png');
   }
 
+  //-----------------------------------
+  //-----------------------------------
+  //Создание трубы
+  //-----------------------------------
+  //-----------------------------------
+
   // Открывает контекстное меню создания объекта (скважина, потребитель и т.д.)
   // в точке клика и сохраняет координаты для будущего начала трубы.
   showStartObjectCreationMenu(point: Point, event: MouseEvent) {
@@ -509,7 +528,7 @@ export class MapComponent
       return;
     }
 
-    this.startPipeFromWell(this.pendingPipeStartPoint);
+    this.startPipeFromPoint(this.pendingPipeStartPoint);
     this.isDrawingPipe = true;
     this.currentPipe = [this.pendingPipeStartPoint];
     this.drawPipeVertex(this.pendingPipeStartPoint, false);
@@ -519,14 +538,108 @@ export class MapComponent
     this.pendingPipeStartPoint = null;
   }
 
-  // логика рисования трубы: добавляем вершины, открываем диалог для диаметра
+  // включаем временную линию, вызываем при старте рисования трубы
+  private enableTempPipeLine() {
+    console.log('enableTempPipeLine', this.map);
+
+    if (!this.map) return;
+
+    this.map.on('mousemove', this.onMouseMoveTempPipe);
+  }
+
+  // отключаем временную линию, вызываем после завершения трубы
+  private disableTempPipeLine() {
+    if (!this.map) return;
+
+    this.map.off('mousemove', this.onMouseMoveTempPipe);
+  }
+
+  // функция для движения мыши
+  private onMouseMoveTempPipe = (e: L.LeafletMouseEvent) => {
+    if (!this.isDrawingPipe || this.currentPipe.length === 0) {
+      this.tempLine = null;
+      this.g.selectAll('.pipe-temp-line').remove();
+      return;
+    }
+
+    let point: Point = [e.latlng.lng, e.latlng.lat];
+    const snapped = this.getSnappedPoint(point, 15);
+    if (snapped) point = snapped;
+
+    const last = this.currentPipe.at(-1)!;
+    this.tempLine = { from: last, to: point };
+
+    this.drawTempLine();
+  };
+
+  private drawTempLine() {
+    if (!this.tempLine || !this.g) return;
+
+    // сначала убираем старую временную линию
+    this.g.selectAll('.pipe-temp-line').remove();
+
+    const fromScreen = this.toScreen(this.tempLine.from);
+    const toScreen = this.toScreen(this.tempLine.to);
+
+    this.g
+      .append('line')
+      .attr('class', 'pipe-temp-line')
+      .attr('x1', fromScreen.x)
+      .attr('y1', fromScreen.y)
+      .attr('x2', toScreen.x)
+      .attr('y2', toScreen.y)
+      .attr('stroke', 'blue')
+      .attr('stroke-width', 2)
+      .attr('pointer-events', 'none')
+      .attr('stroke-dasharray', '5,5');
+  }
+
+  // начинаем рисовать трубу из выбранного объекта или вершины
+  startPipeFromPoint(point: Point) {
+    if (this.selectedTool !== 'pipe') return;
+
+    this.isDrawingPipe = true;
+    this.currentPipe = [point];
+    this.drawPipeVertex(point, false);
+    this.skipNextSamePointCheck = true;
+
+    this.enableTempPipeLine();
+  }
+
+  //обрабатывает клик при рисовании трубы
   handlePipeClick(point: Point, event?: MouseEvent) {
     if (!this.isDrawingPipe) return;
 
-    const snapDistancePx = 15; // радиус привязки в пикселях на экране
+    const snapped = this.getSnappedPoint(point, 15);
 
-    // объединяем все точки для привязки
-    const snapPoints: Point[] = [
+    if (this.currentPipe.length === 0) {
+      if (!snapped) {
+        this.showStartObjectCreationMenu(point, event as MouseEvent);
+        return;
+      }
+
+      this.addVertex(snapped);
+      return;
+    }
+
+    const target = snapped || point;
+    const last = this.currentPipe.at(-1)!;
+
+    if (!this.skipNextSamePointCheck && this.isSamePoint(target, last)) {
+      if (this.currentPipe.length > 1) {
+        this.finishClickEvent = event as MouseEvent;
+        this.openDiameterDialog();
+      }
+      return;
+    }
+
+    this.skipNextSamePointCheck = false;
+    this.addVertex(target);
+  }
+
+  //ищет ближайшую существующую точку для привязки клика
+  private getSnappedPoint(point: Point, radiusPx: number): Point | null {
+    const snapPoints = [
       ...this.state.wells.map((w) => w.position),
       ...this.state.users.map((u) => u.position),
       ...this.state.pipes.flatMap((p) => p.vertices),
@@ -536,119 +649,103 @@ export class MapComponent
       ...(this.state.towers || []).map((t) => t.position),
     ];
 
-    let closestPoint: Point | null = null;
-    let minDistance = Infinity;
+    const screenPoint = this.toScreen(point);
 
-    for (const snapPoint of snapPoints) {
-      const screenPoint = this.map.latLngToLayerPoint(
-        L.latLng(point[1], point[0])
-      );
-      const screenSnap = this.map.latLngToLayerPoint(
-        L.latLng(snapPoint[1], snapPoint[0])
-      );
-      const dx = screenPoint.x - screenSnap.x;
-      const dy = screenPoint.y - screenSnap.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      if (dist < snapDistancePx && dist < minDistance) {
-        minDistance = dist;
-        closestPoint = snapPoint;
+    for (const sp of snapPoints) {
+      if (this.screenDistance(screenPoint, this.toScreen(sp)) <= radiusPx) {
+        return sp;
       }
     }
 
-    // если нашли близкую точку, привязываем, иначе создаем новую
-    if (closestPoint) {
-      point = [...closestPoint] as Point;
-    }
+    return null;
+  }
 
-    if (this.currentPipe.length === 0) {
-      // если рядом НИЧЕГО нет — покажем меню создания объекта
-      if (!closestPoint) {
-        this.showStartObjectCreationMenu(point, event as MouseEvent);
-        return;
-      }
+  //преобразует координаты карты в координаты экрана.
+  private toScreen(p: Point) {
+    return this.map.latLngToLayerPoint(L.latLng(p[1], p[0]));
+  }
 
-      // если есть привязка — старт стандартный
-      this.currentPipe.push(point);
-      this.drawPipeVertex(point, false);
-      return;
-    }
+  //считает расстояние между двумя точками на экране.
+  private screenDistance(a: any, b: any) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
 
-    const lastPoint = this.currentPipe[this.currentPipe.length - 1];
-    if (this.skipNextSamePointCheck) {
-      this.skipNextSamePointCheck = false;
-    } else if (this.isSamePoint(point, lastPoint)) {
-      if (this.currentPipe.length > 1) {
-        this.finishClickEvent = event as MouseEvent;
-        this.showDiameterDialog = true;
-        this.pipeDiameterInput = null;
-        this.isDrawingPipe = false;
-        this.tempLine = null;
-        this.shouldFocusDiameterInput = true;
-      }
-      return;
-    }
-
+  //добавляет точку в текущую трубу и перерисовывает карту.
+  private addVertex(point: Point) {
     this.currentPipe.push(point);
+    this.drawPipeVertex(point, false);
     this.redrawAllPipes(this.state.pipes, this.state.users);
   }
 
-  // завершает рисование трубы и сохраняет её
+  //открывает диалог ввода диаметра трубы и останавливает текущую отрисовку.
+  private openDiameterDialog() {
+    this.showDiameterDialog = true;
+    this.pipeDiameterInput = null;
+    this.isDrawingPipe = false;
+    this.tempLine = null;
+    this.shouldFocusDiameterInput = true;
+  }
+
   finalizePipe() {
-    if (this.currentPipe.length > 1 && this.pipeDiameter != null) {
-      // ищем ближайший объект к последней точке трубы
-      const lastPoint = this.currentPipe[this.currentPipe.length - 1];
-
-      const snapPoints: Point[] = [
-        ...this.state.wells.map((w) => w.position),
-        ...this.state.users.map((u) => u.position),
-        ...this.state.pipes.flatMap((p) => p.vertices),
-        ...(this.state.captures || []).map((c) => c.position),
-        ...(this.state.pumps || []).map((p) => p.position),
-        ...(this.state.reservoirs || []).map((r) => r.position),
-        ...(this.state.towers || []).map((t) => t.position),
-      ];
-
-      let isNearObject = false;
-      for (const sp of snapPoints) {
-        if (this.getDistance(lastPoint, sp) < 0.00005) {
-          isNearObject = true;
-          break;
-        }
-      }
-
-      // если рядом ничего нет — показываем меню выбора объекта
-      if (!isNearObject) {
-        this.pendingPipeStartPoint = lastPoint;
-
-        if (this.finishClickEvent) {
-          this.startMenuPosition = {
-            x: this.finishClickEvent.clientX,
-            y: this.finishClickEvent.clientY,
-          };
-        }
-
-        this.showStartObjectMenu = true;
-        this.finishClickEvent = null; // очистили
-        return;
-      }
-
-      this.objectService.addPipe([...this.currentPipe], this.pipeDiameter);
+    if (this.currentPipe.length <= 1 || this.pipeDiameter == null) {
+      this.resetPipeDrawing();
+      return;
     }
 
+    const lastPoint = this.currentPipe.at(-1)!;
+
+    // проверяем, есть ли рядом объект в радиусе 15px
+    if (!this.isNearAnyObjectPx(lastPoint, 15)) {
+      this.pendingPipeStartPoint = lastPoint;
+
+      if (this.finishClickEvent) {
+        this.startMenuPosition = {
+          x: this.finishClickEvent.clientX,
+          y: this.finishClickEvent.clientY,
+        };
+      }
+
+      this.showStartObjectMenu = true;
+      this.finishClickEvent = null;
+      return;
+    }
+
+    // сохраняем трубу
+    this.objectService.addPipe([...this.currentPipe], this.pipeDiameter);
+
+    this.resetPipeDrawing();
+  }
+
+  // сбрасывает текущее рисование трубы и перерисовывает карту
+  private resetPipeDrawing() {
     this.currentPipe = [];
     this.pipeDiameter = null;
     this.showDiameterDialog = false;
     this.isDrawingPipe = this.selectedTool === 'pipe';
     this.tempLine = null;
     this.redrawAllPipes(this.state.pipes, this.state.users);
+
+    this.disableTempPipeLine();
   }
 
-  //вычисляет расстояние между двумя точками.
-  getDistance(p1: Point, p2: Point) {
-    const dx = p1[0] - p2[0];
-    const dy = p1[1] - p2[1];
-    return Math.sqrt(dx * dx + dy * dy);
+  // проверяет, есть ли рядом какой-либо объект на экране в пикселях
+  private isNearAnyObjectPx(point: Point, radiusPx: number): boolean {
+    const allPoints: Point[] = [
+      ...this.state.wells.map((w) => w.position),
+      ...this.state.users.map((u) => u.position),
+      ...this.state.pipes.flatMap((p) => p.vertices),
+      ...(this.state.captures || []).map((c) => c.position),
+      ...(this.state.pumps || []).map((p) => p.position),
+      ...(this.state.reservoirs || []).map((r) => r.position),
+      ...(this.state.towers || []).map((t) => t.position),
+    ];
+
+    const screenLast = this.toScreen(point);
+
+    return allPoints.some((p) => {
+      const screenP = this.toScreen(p);
+      return this.screenDistance(screenLast, screenP) < radiusPx;
+    });
   }
 
   //Если пользователь нажал Escape — отменяет рисование трубы.
@@ -755,10 +852,17 @@ export class MapComponent
   }
 
   drawLineSegment(from: Point, to: Point, isDashed: boolean = false) {
+    const screenFrom = this.toScreen(from);
+    const screenTo = this.toScreen(to);
+
     const line = this.g
       .append('line')
       .attr('class', isDashed ? 'pipe-temp-dash' : 'pipe-temp')
       .datum([from, to])
+      .attr('x1', screenFrom.x)
+      .attr('y1', screenFrom.y)
+      .attr('x2', screenTo.x)
+      .attr('y2', screenTo.y)
       .attr('stroke', 'blue')
       .attr('stroke-width', 2)
       .attr('pointer-events', 'none');
@@ -927,6 +1031,10 @@ export class MapComponent
       )
     );
 
+    if (this.tempLine) {
+      this.drawLineSegment(this.tempLine.from, this.tempLine.to, true);
+    }
+
     updateObjectPositions(this.map, this.g);
   }
 
@@ -1062,8 +1170,6 @@ export class MapComponent
           (p) => !(p.type === 'user' && p.data.id === data.id)
         );
         break;
-
-      case 'pipe':
       case 'pipe-segment': // теперь сегмент — это отдельная труба, обрабатываем одинаково
         this.objectService.deletePipeSegment(data.pipeId || data.id);
         this.passports = this.passports.filter(
@@ -1115,16 +1221,6 @@ export class MapComponent
     this.state.reservoirs.forEach((r) => r.visible && this.addReservoir(r));
     this.state.towers.forEach((t) => t.visible && this.addTower(t));
     this.redrawAllPipes(this.state.pipes, this.state.users);
-  }
-
-  // начинаем рисовать трубу из выбранной скважины
-  startPipeFromWell(point: Point) {
-    if (this.selectedTool === 'pipe' && !this.isDrawingPipe) {
-      this.isDrawingPipe = true;
-      this.currentPipe = [point];
-      this.drawPipeVertex(point, false);
-      this.skipNextSamePointCheck = true;
-    }
   }
 
   // выбираем диаметр трубы и завершаем рисование
@@ -1426,14 +1522,19 @@ export class MapComponent
     }
   }
 
-  // сохраняем все изменения (новые объекты, удалённые, обновлённые) на сервер
   saveAll() {
     if (!this.id_scheme) {
       console.error('id_scheme не определён');
       return;
     }
 
-    // 1) Отправляем удалённые объекты (как есть)
+    this.sendDeletedObjects();
+    this.sendUpdatedObjects();
+    this.sendCreatedObjects();
+  }
+
+  //Удалённые объекты
+  private sendDeletedObjects() {
     const deletedObjects = this.objectService
       .getDeletedObjects()
       .map((obj) => ({
@@ -1441,188 +1542,182 @@ export class MapComponent
         id: typeof obj.id === 'string' ? parseInt(obj.id, 10) : obj.id,
       }));
 
-    if (deletedObjects.length > 0) {
-      this.dataSchemeService
-        .deleteObjects(deletedObjects, this.id_scheme)
-        .subscribe({
-          next: (response) => {
-            console.log(
-              'Удалённые объекты успешно отправлены на сервер:',
-              response
-            );
-            this.objectService.clearDeletedObjects();
-          },
-          error: (err) => {
-            console.error('Ошибка при отправке удалённых объектов:', err);
-          },
-        });
-    } else {
+    if (!deletedObjects.length) {
       console.log('Нет объектов для удаления');
+      return;
     }
 
-    //обновление
+    this.dataSchemeService
+      .deleteObjects(deletedObjects, this.id_scheme!)
+      .subscribe({
+        next: (res) => {
+          console.log('Удалённые объекты успешно отправлены на сервер:', res);
+          this.objectService.clearDeletedObjects();
+        },
+        error: (err) =>
+          console.error('Ошибка при отправке удалённых объектов:', err),
+      });
+  }
+
+  // -------------------- Обновлённые объекты --------------------
+  private sendUpdatedObjects() {
     const updatedObjects = this.objectService.getUpdatedObjects();
+    if (!updatedObjects.length) return;
 
-    if (updatedObjects.length > 0) {
-      const features: any[] = [];
-
-      updatedObjects.forEach((obj) => {
-        const { type, data } = obj;
-
-        if (type === 'Труба') {
-          const name = data._name || `Труба #${data.id}`;
-          const diameter = data.diameter || 0;
-
-          const uniqueSegments = new Set<string>();
-          const segmentsToSend = data.updatedSegments || [];
-
-          segmentsToSend.forEach(([from, to]: [Point, Point]) => {
-            const key = `${from[0]},${from[1]}-${to[0]},${to[1]}`;
-            if (uniqueSegments.has(key)) return;
-            uniqueSegments.add(key);
-
-            features.push({
-              type: 'Feature',
-              id: data.id,
-              name_object_type: 'Труба',
-              geometry: { type: 'LineString', coordinates: [from, to] },
-              properties: { Имя: name, Диаметр: diameter, Адрес: '-' },
-            });
-          });
-        } else if (type === 'Скважина') {
-          if (!data.position) return;
-          features.push({
-            type: 'Feature',
-            id: data.id,
-            name_object_type: 'Скважина',
-            geometry: { type: 'Point', coordinates: data.position },
-            properties: {
-              Имя: `Скважина #${data.id}`,
-              Адрес: '-',
-              Глубина: 0,
-              Диаметр: 0,
-            },
-          });
-        } else {
-          if (!data.position) return;
-
-          features.push({
-            type: 'Feature',
-            id: data.id,
-            name_object_type: type,
-            geometry: { type: 'Point', coordinates: data.position },
-            properties: {
-              Имя: `${type} #${data.id}`,
-              Адрес: 'улица Куйбышева, 47',
-              'Геодезическая отметка': 10.0,
-              'Диаметр выходного отверстия': 0.66,
-              Категория: '???',
-              'Минимальный напор воды': 15.0,
-              Напор: 3.0,
-              'Относительный расход воды': 8.0,
-              'Полный напор': 5.0,
-              'Расчетный расход воды в будний день': 70.0,
-              'Расчетный расход воды в воскресенье': 100.0,
-              'Расчетный расход воды в праздники': 115.0,
-              'Расчетный расход воды в субботу': 110.0,
-              'Расчётный расход воды': 7.0,
-              'Способ задания потребителя': '???',
-              'Текущий расход воды': 95.0,
-              'Уровень воды': 18.0,
-            },
-          });
-        }
-      });
-
-      const payload = { data: { type: 'FeatureCollection', features } };
-
-      this.dataSchemeService.updateObjects(payload).subscribe({
-        next: () => this.objectService.clearUpdatedObjects(),
-        error: (err) => console.error('Ошибка при обновлении объектов', err),
-      });
-    }
-
-    const createdObjects = this.objectService.getCreatedObjects();
-    if (createdObjects.length === 0) return;
     const features: any[] = [];
-    createdObjects.forEach((obj) => {
-      const { type, data } = obj;
+    updatedObjects.forEach((obj) => this.pushObjectFeatures(features, obj));
 
-      if (type === 'Труба') {
-        const name = data._name || `Труба #${data.id}`;
-        const diameter = data.diameter;
+    if (!features.length) return;
 
-        for (let i = 1; i < data.vertices.length; i++) {
-          const segment = [data.vertices[i - 1], data.vertices[i]];
-          features.push({
-            type: 'Feature',
-            name_object_type: 'Труба',
-            geometry: { type: 'LineString', coordinates: segment },
-            properties: { Имя: name, Диаметр: diameter, Адрес: 'Пушкина' },
-          });
-        }
-      } else if (type === 'Потребитель') {
-        if (!data.position) return; // пропускаем пустые объекты
-        features.push({
-          type: 'Feature',
-          name_object_type: 'Потребитель',
-          geometry: { type: 'Point', coordinates: data.position },
-          properties: {
-            Имя: `${type} #${data.id}`,
-            Адрес: 'улица Куйбышева, 47',
-            'Геодезическая отметка': 10.0,
-            'Диаметр выходного отверстия': 0.66,
-            Категория: '???',
-            'Минимальный напор воды': 15.0,
-            Напор: 3.0,
-            'Относительный расход воды': 8.0,
-            'Полный напор': 5.0,
-            'Расчетный расход воды в будний день': 70.0,
-            'Расчетный расход воды в воскресенье': 100.0,
-            'Расчетный расход воды в праздники': 115.0,
-            'Расчетный расход воды в субботу': 110.0,
-            'Расчётный расход воды': 7.0,
-            'Способ задания потребителя': '???',
-            'Текущий расход воды': 95.0,
-            'Уровень воды': 18.0,
-          },
-        });
-      } else if (type === 'Скважина') {
-        if (!data.position) return;
-        features.push({
-          type: 'Feature',
-          name_object_type: 'Скважина',
-          geometry: { type: 'Point', coordinates: data.position },
-          properties: {
-            Имя: `Скважина #${data.id}`,
-            Адрес: '-',
-            Глубина: 0,
-            Диаметр: 0,
-          },
-        });
-      } else {
-        // остальные объекты, например Каптаж, Насос и т.д.
-        if (!data.position) return;
-        features.push({
-          type: 'Feature',
-          name_object_type: type,
-          geometry: { type: 'Point', coordinates: data.position },
-          properties: { Имя: `${type} #${data.id}`, Адрес: '-' },
-        });
-      }
+    const payload = { data: { type: 'FeatureCollection', features } };
+    this.dataSchemeService.updateObjects(payload).subscribe({
+      next: () => this.objectService.clearUpdatedObjects(),
+      error: (err) => console.error('Ошибка при обновлении объектов', err),
     });
+  }
+
+  // -------------------- Созданные объекты --------------------
+  private sendCreatedObjects() {
+    const createdObjects = this.objectService.getCreatedObjects();
+    if (!createdObjects.length) return;
+
+    const features: any[] = [];
+    createdObjects.forEach((obj) =>
+      this.pushObjectFeatures(features, obj, true)
+    );
+
+    if (!features.length) return;
 
     const payload = {
-      data: {
-        type: 'FeatureCollection',
-        id_scheme: this.id_scheme,
-        features,
-      },
+      data: { type: 'FeatureCollection', id_scheme: this.id_scheme, features },
     };
-
     this.dataSchemeService.createObjects(payload).subscribe({
       next: () => this.objectService.clearCreatedObjects(),
       error: (err) => console.error('Ошибка при создании объектов', err),
     });
+  }
+
+  // -------------------- Сегменты трубы --------------------
+  private getSegmentsFromVertices(vertices: Point[]): [Point, Point][] {
+    const segments: [Point, Point][] = [];
+    for (let i = 1; i < vertices.length; i++) {
+      segments.push([vertices[i - 1], vertices[i]]);
+    }
+    return segments;
+  }
+
+  // -------------------- Генерация Feature --------------------
+  private pushObjectFeatures(features: any[], obj: any, isNew = false) {
+    const { type, data } = obj;
+
+    if (type === 'Труба') {
+      const segments = isNew
+        ? this.getSegmentsFromVertices(data.vertices)
+        : data.updatedSegments || [];
+      const uniqueSegments = new Set<string>();
+      const name = data._name || `Труба #${data.id}`;
+      const diameter = data.diameter || 0;
+
+      segments.forEach(([from, to]: [Point, Point]) => {
+        const key = `${from[0]},${from[1]}-${to[0]},${to[1]}`;
+        if (uniqueSegments.has(key)) return;
+        uniqueSegments.add(key);
+
+        features.push(
+          this.buildFeature(
+            data.id,
+            'Труба',
+            { type: 'LineString', coordinates: [from, to] },
+            {
+              Имя: name,
+              Диаметр: diameter,
+              Адрес: isNew ? 'Пушкина' : '-',
+            }
+          )
+        );
+      });
+    } else {
+      if (!data.position) return;
+
+      const geometry = { type: 'Point', coordinates: data.position };
+      const properties = this.getPropertiesByType(type, data.id);
+      features.push(this.buildFeature(data.id, type, geometry, properties));
+    }
+  }
+
+  // -------------------- Общая генерация Feature --------------------
+  private buildFeature(
+    id: number,
+    name_object_type: string,
+    geometry: any,
+    properties: any
+  ) {
+    return { type: 'Feature', id, name_object_type, geometry, properties };
+  }
+
+  // -------------------- Свойства по типу --------------------
+  private getPropertiesByType(type: string, id: number) {
+    switch (type) {
+      case 'Скважина':
+        return { Имя: `Скважина #${id}`, Адрес: '-', Глубина: 0, Диаметр: 0 };
+      case 'Труба':
+        return { Имя: `Труба #${id}`, Диаметр: 0.5, Адрес: '-' };
+      case 'Потребитель':
+        return {
+          Имя: `Потребитель #${id}`,
+          Адрес: 'улица Куйбышева, 47',
+          Напор: 3.0,
+          'Текущий расход воды': 95.0,
+        };
+      case 'Каптаж':
+        return {
+          Имя: `Каптаж #${id}`,
+          Адрес: '-',
+          Производительность: 0,
+          'Бренд насоса': '-',
+          'Глубина скважины': 0,
+          'Диаметр скважины': 0,
+        };
+      case 'Насос':
+        return {
+          Адрес: '-',
+          'Геодезическая отметка': 0,
+          Имя: '-',
+          Источники: '-',
+          Марка: '-',
+          'Напор на входе': 0,
+          'Напор на выходе': 0,
+          'Номинальный напор после насоса': 0,
+          'Номинальный напор развиваемый насосом': 0,
+          'Полный напор на входе': 0,
+          'Полный напор на выходе': 0,
+          'Путь пройденный от источника': 0,
+          'Текущий расход воды': 0,
+        };
+      case 'Контр-резервуар':
+        return {
+          Адрес: '-',
+          'Высота воды': 0,
+          'Геодезическая отметка': 0,
+          Имя: `Насос #${id}`,
+          Напор: 0,
+          'Полный напор': 0,
+          'Расход воды л/с': 0,
+          'Расход воды м3/ч': 0,
+        };
+      case 'Водонапорная башня':
+        return {
+          Адрес: 'микрорайон Молодёжный',
+          'Высота воды': 7.0,
+          'Геодезическая отметка': 13.0,
+          Имя: 'Водонапорная башня Нурлата',
+          Напор: 5.0,
+          'Полный напор': 6.0,
+          'Расход воды л/с': 6.0,
+          'Расход воды м3/ч': 16.0,
+        };
+      default:
+        return { Имя: `${type} #${id}`, Адрес: '-' };
+    }
   }
 }

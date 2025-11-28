@@ -483,7 +483,7 @@ export class ObjectService {
     if (obj) {
       obj.position = newPosition;
       this.state.next(currentState);
-      this.markUpdated('Резервуар', obj);
+      this.markUpdated('Контр-резервуар', obj);
     }
   }
 
@@ -493,7 +493,7 @@ export class ObjectService {
     if (obj) {
       obj.position = newPosition;
       this.state.next(currentState);
-      this.markUpdated('Башня', obj);
+      this.markUpdated('Водонапорная башня', obj);
     }
   }
 
