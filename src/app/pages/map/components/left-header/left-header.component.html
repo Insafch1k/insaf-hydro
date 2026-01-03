@@ -1,160 +1,304 @@
 <div class="left-header">
-	<div class="navigator-block">
-	  <p>Навигатор</p>
-	  <div id="navigator-map" class="navigator-map"></div>
-	</div>
-  
-	<div class="layers-block">
-	  <p>Слои</p>
-	  <div class="layers">
-		<div class="layer-item">
-		  <img
-			class="arrow"
-			[src]="isObjectTypesOpen ? '../../../../../assets/data/icon/strelka-down.svg' : '../../../../../assets/data/icon/strelka.svg'"
-			alt="Arrow"
-			(click)="toggleObjectTypes()"
-		  />
-		  <img (click)="toggleObjectTypes()" src="../../../../../assets/data/icon/folder.svg" alt="Folder" />
-		  <label (click)="toggleObjectTypes()">Типы объектов</label>
-		  <input
-			type="checkbox"
-			checked
-			(change)="toggleGroupVisibility('wells', $event); toggleGroupVisibility('pipes', $event); toggleGroupVisibility('users', $event)"
-		  />
-		</div>
-  
-		<div *ngIf="isObjectTypesOpen" class="sub-layers">
-		  <!-- Скважины -->
-		  <div *ngIf="wells.length > 0" class="layer-item sub-layer">
-			<img
-			  class="arrow"
-			  [src]="isWellsOpen ? '../../../../../assets/data/icon/strelka-down.svg' : '../../../../../assets/data/icon/strelka.svg'"
-			  alt="Arrow"
-			  (click)="toggleWells()"
-			/>
-			<label (click)="toggleWells()">Скважины</label>
-			<input type="checkbox" checked (change)="toggleGroupVisibility('wells', $event)" />
-		  </div>
-		  <div *ngIf="isWellsOpen && wells.length > 0" class="sub-layers">
-			<div *ngFor="let well of wells" class="layer-item sub-sub-layer">
-			  <label (click)="onFlyToWell(well)" (dblclick)="onOpenWellPassport(well)">Скважина ({{ well.id }})</label>
-			  <input
-				type="checkbox"
-				[checked]="well.visible"
-				(change)="toggleWellVisibility(well.id, $event)"
-			  />
-			</div>
-		  </div>
-  
-		  <!-- Трубы -->
-		  <div *ngIf="pipes.length > 0" class="layer-item sub-layer">
-			<img
-			  class="arrow"
-			  [src]="isPipesOpen ? '../../../../../assets/data/icon/strelka-down.svg' : '../../../../../assets/data/icon/strelka.svg'"
-			  alt="Arrow"
-			  (click)="togglePipes()"
-			/>
-			<label (click)="togglePipes()">Трубы</label>
-			<input type="checkbox" checked (change)="toggleGroupVisibility('pipes', $event)" />
-		  </div>
-		  <div *ngIf="isPipesOpen && pipes.length > 0" class="sub-layers">
-			<div *ngFor="let pipe of pipes">
-			  <div class="truba">
-				<img
-				  class="arrow"
-				  [src]="openPipeIds.has(pipe.id) ? '../../../../../assets/data/icon/strelka-down.svg' : '../../../../../assets/data/icon/strelka.svg'"
-				  alt="Arrow"
-				  (click)="togglePipeSegments(pipe.id)"
-				/>
-				<label (click)="onFlyToPipe(pipe)" (dblclick)="onOpenPipePassport(pipe)">Труба ({{ pipe.id }})</label>
-				<input
-				  type="checkbox"
-				  [checked]="pipe.visible"
-				  (change)="togglePipeVisibility(pipe.id, $event)"
-				/>
-			  </div>
-			  <div *ngIf="openPipeIds.has(pipe.id)" class="sub-layers2">
-				<div *ngFor="let segment of getPipeSegments(pipe)" class="layer-item2 sub-sub-layer2" (click)="onFlyToPipeSegment(segment)" (dblclick)="onOpenPipeSegmentPassport(segment)">
-				  <label>Отрезок {{ segment.fromIndex }}-{{ segment.toIndex }}</label>
-				  <img src="../../../../../assets/data/icon/wrap.svg" alt="Паспорт" style="width:16px;cursor:pointer;margin-right:4px;" />
-				</div>
-			  </div>
-			</div>
-		  </div>
-  
-		  <!-- Потребители -->
-		  <div *ngIf="users.length > 0" class="layer-item sub-layer">
-			<img
-			  class="arrow"
-			  [src]="isUsersOpen ? '../../../../../assets/data/icon/strelka-down.svg' : '../../../../../assets/data/icon/strelka.svg'"
-			  alt="Arrow"
-			  (click)="toggleUsers()"
-			/>
-			<label (click)="toggleUsers()">Потребители</label>
-			<input type="checkbox" checked (change)="toggleGroupVisibility('users', $event)" />
-		  </div>
-		  <div *ngIf="isUsersOpen && users.length > 0" class="sub-layers">
-			<div *ngFor="let user of users" class="layer-item sub-sub-layer">
-			  <label (click)="onFlyToUser(user)" (dblclick)="onOpenUserPassport(user)">Потребитель ({{ user.id }})</label>
-			</div>
-		  </div>
-  
-		  <!-- Каптаж -->
-		  <div *ngIf="captures.length > 0" class="layer-item sub-layer">
-			<img class="arrow" src="../../../../../assets/data/icon/strelka.svg" alt="Arrow" />
-			<label>Каптажи</label>
-			<input type="checkbox" checked disabled />
-		  </div>
-		  <div *ngIf="captures.length > 0" class="sub-layers">
-			<div *ngFor="let obj of captures" class="layer-item sub-sub-layer">
-			  <img src="../../../../../assets/data/images/capture.png" width="16" height="16" />
-			  <label (click)="onFlyToCapture(obj)" (dblclick)="onOpenCapturePassport(obj)">Каптаж ({{ obj.id }})</label>
-			  <input type="checkbox" [checked]="obj.visible" (change)="toggleCaptureVisibility(obj.id, $event)" />
-			</div>
-		  </div>
-  
-		  <!-- Насосы -->
-		  <div *ngIf="pumps.length > 0" class="layer-item sub-layer">
-			<img class="arrow" src="../../../../../assets/data/icon/strelka.svg" alt="Arrow" />
-			<label>Насосы</label>
-			<input type="checkbox" checked disabled />
-		  </div>
-		  <div *ngIf="pumps.length > 0" class="sub-layers">
-			<div *ngFor="let obj of pumps" class="layer-item sub-sub-layer">
-			  <img src="../../../../../assets/data/images/pump.png" width="16" height="16" />
-			  <label (click)="onFlyToPump(obj)" (dblclick)="onOpenPumpPassport(obj)">Насос ({{ obj.id }})</label>
-			  <input type="checkbox" [checked]="obj.visible" (change)="togglePumpVisibility(obj.id, $event)" />
-			</div>
-		  </div>
-  
-		  <!-- Контр-резервуары -->
-		  <div *ngIf="reservoirs.length > 0" class="layer-item sub-layer">
-			<img class="arrow" src="../../../../../assets/data/icon/strelka.svg" alt="Arrow" />
-			<label>Контр-резервуары</label>
-			<input type="checkbox" checked disabled />
-		  </div>
-		  <div *ngIf="reservoirs.length > 0" class="sub-layers">
-			<div *ngFor="let obj of reservoirs" class="layer-item sub-sub-layer">
-			  <img src="../../../../../assets/data/images/reservoir.png" width="16" height="16" />
-			  <label (click)="onFlyToReservoir(obj)" (dblclick)="onOpenReservoirPassport(obj)">Контр-резервуар ({{ obj.id }})</label>
-			  <input type="checkbox" [checked]="obj.visible" (change)="toggleReservoirVisibility(obj.id, $event)" />
-			</div>
-		  </div>
-  
-		  <!-- Водонапорные башни -->
-		  <div *ngIf="towers.length > 0" class="layer-item sub-layer">
-			<img class="arrow" src="../../../../../assets/data/icon/strelka.svg" alt="Arrow" />
-			<label>Водонапорные башни</label>
-			<input type="checkbox" checked disabled />
-		  </div>
-		  <div *ngIf="towers.length > 0" class="sub-layers">
-			<div *ngFor="let obj of towers" class="layer-item sub-sub-layer">
-			  <img src="../../../../../assets/data/images/tower.png" width="16" height="16" />
-			  <label (click)="onFlyToTower(obj)" (dblclick)="onOpenTowerPassport(obj)">Водонапорная башня ({{ obj.id }})</label>
-			  <input type="checkbox" [checked]="obj.visible" (change)="toggleTowerVisibility(obj.id, $event)" />
-			</div>
-		  </div>
-		</div>
-	  </div>
-	</div>
+  <div class="navigator-block">
+    <p>Навигатор</p>
+    <div id="navigator-map" class="navigator-map"></div>
   </div>
+
+  <div class="layers-block">
+    <p>Слои</p>
+    <div class="layers">
+      <div class="layer-item">
+        <img
+          class="arrow"
+          [src]="
+            isObjectTypesOpen
+              ? '../../../../../assets/data/icon/strelka-down.svg'
+              : '../../../../../assets/data/icon/strelka.svg'
+          "
+          alt="Arrow"
+          (click)="toggleObjectTypes()"
+        />
+        <img
+          (click)="toggleObjectTypes()"
+          src="../../../../../assets/data/icon/folder.svg"
+          alt="Folder"
+        />
+        <label (click)="toggleObjectTypes()">Типы объектов</label>
+        <input
+          type="checkbox"
+          checked
+          (change)="
+            toggleGroupVisibility('wells', $event);
+            toggleGroupVisibility('pipes', $event);
+            toggleGroupVisibility('users', $event)
+          "
+        />
+      </div>
+
+      <div *ngIf="isObjectTypesOpen" class="sub-layers">
+        <!-- Скважины -->
+        <div *ngIf="wells.length > 0" class="layer-item sub-layer">
+          <img
+            class="arrow"
+            [src]="
+              isWellsOpen
+                ? '../../../../../assets/data/icon/strelka-down.svg'
+                : '../../../../../assets/data/icon/strelka.svg'
+            "
+            alt="Arrow"
+            (click)="toggleWells()"
+          />
+          <label (click)="toggleWells()">Скважины</label>
+          <input
+            type="checkbox"
+            checked
+            (change)="toggleGroupVisibility('wells', $event)"
+          />
+        </div>
+        <div *ngIf="isWellsOpen && wells.length > 0" class="sub-layers">
+          <div *ngFor="let well of wells" class="layer-item sub-sub-layer">
+            <label
+              (click)="onFlyToWell(well)"
+              (dblclick)="onOpenWellPassport(well)"
+              >Скважина ({{ well.id }})</label
+            >
+            <input
+              type="checkbox"
+              [checked]="well.visible"
+              (change)="toggleWellVisibility(well.id, $event)"
+            />
+          </div>
+        </div>
+
+        <!-- Трубы -->
+        <div *ngIf="pipes.length > 0" class="layer-item sub-layer">
+          <img
+            class="arrow"
+            [src]="
+              isPipesOpen
+                ? '../../../../../assets/data/icon/strelka-down.svg'
+                : '../../../../../assets/data/icon/strelka.svg'
+            "
+            alt="Arrow"
+            (click)="togglePipes()"
+          />
+          <label (click)="togglePipes()">Трубы</label>
+          <input
+            type="checkbox"
+            checked
+            (change)="toggleGroupVisibility('pipes', $event)"
+          />
+        </div>
+
+        <div *ngIf="isPipesOpen && pipes.length > 0" class="sub-layers">
+          <div
+            *ngFor="let segment of pipeSegments"
+            class="layer-item sub-sub-layer"
+          >
+            <label
+              class="segment-label"
+              (click)="onFlyToPipeSegment(segment)"
+              (dblclick)="onOpenPipeSegmentPassport(segment)"
+            >
+              {{ segment.name }} (Ø{{ segment.diameter || 0 }}мм)
+            </label>
+            <input
+              type="checkbox"
+              [checked]="segment.visible"
+              (change)="
+                togglePipeSegmentVisibility(segment.pipeId, segment.id, $event)
+              "
+            />
+          </div>
+        </div>
+
+        <!-- Потребители -->
+        <div *ngIf="users.length > 0" class="layer-item sub-layer">
+          <img
+            class="arrow"
+            [src]="
+              isUsersOpen
+                ? '../../../../../assets/data/icon/strelka-down.svg'
+                : '../../../../../assets/data/icon/strelka.svg'
+            "
+            alt="Arrow"
+            (click)="toggleUsers()"
+          />
+          <label (click)="toggleUsers()">Потребители</label>
+          <input
+            type="checkbox"
+            checked
+            (change)="toggleGroupVisibility('users', $event)"
+          />
+        </div>
+        <div *ngIf="isUsersOpen && users.length > 0" class="sub-layers">
+          <div *ngFor="let user of users" class="layer-item sub-sub-layer">
+            <label
+              (click)="onFlyToUser(user)"
+              (dblclick)="onOpenUserPassport(user)"
+              >Потребитель ({{ user.id }})</label
+            >
+          </div>
+        </div>
+
+        <div *ngIf="captures.length > 0" class="layer-item sub-layer">
+          <img
+            class="arrow"
+            [src]="
+              isCapturesOpen
+                ? '../../../../../assets/data/icon/strelka-down.svg'
+                : '../../../../../assets/data/icon/strelka.svg'
+            "
+            alt="Arrow"
+            (click)="toggleCaptures()"
+          />
+          <label (click)="toggleCaptures()">Каптажи</label>
+          <input
+            type="checkbox"
+            checked
+            (change)="toggleGroupVisibility('captures', $event)"
+          />
+        </div>
+        <div *ngIf="isCapturesOpen && captures.length > 0" class="sub-layers">
+          <div *ngFor="let obj of captures" class="layer-item sub-sub-layer">
+            <img
+              src="../../../../../assets/data/images/capture.png"
+              width="16"
+              height="16"
+            />
+            <label
+              (click)="onFlyToCapture(obj)"
+              (dblclick)="onOpenCapturePassport(obj)"
+              >Каптаж ({{ obj.id }})</label
+            >
+            <input
+              type="checkbox"
+              [checked]="obj.visible"
+              (change)="toggleCaptureVisibility(obj.id, $event)"
+            />
+          </div>
+        </div>
+
+        <!-- Насосы -->
+        <div *ngIf="pumps.length > 0" class="layer-item sub-layer">
+          <img
+            class="arrow"
+            [src]="
+              isPumpsOpen
+                ? '../../../../../assets/data/icon/strelka-down.svg'
+                : '../../../../../assets/data/icon/strelka.svg'
+            "
+            alt="Arrow"
+            (click)="togglePumps()"
+          />
+          <label (click)="togglePumps()">Насосы</label>
+          <input
+            type="checkbox"
+            checked
+            (change)="toggleGroupVisibility('pumps', $event)"
+          />
+        </div>
+        <div *ngIf="isPumpsOpen && pumps.length > 0" class="sub-layers">
+          <div *ngFor="let obj of pumps" class="layer-item sub-sub-layer">
+            <img
+              src="../../../../../assets/data/images/pump.png"
+              width="16"
+              height="16"
+            />
+            <label
+              (click)="onFlyToPump(obj)"
+              (dblclick)="onOpenPumpPassport(obj)"
+              >Насос ({{ obj.id }})</label
+            >
+            <input
+              type="checkbox"
+              [checked]="obj.visible"
+              (change)="togglePumpVisibility(obj.id, $event)"
+            />
+          </div>
+        </div>
+
+        <!-- Контр-резервуары -->
+        <div *ngIf="reservoirs.length > 0" class="layer-item sub-layer">
+          <img
+            class="arrow"
+            [src]="
+              isReservoirsOpen
+                ? '../../../../../assets/data/icon/strelka-down.svg'
+                : '../../../../../assets/data/icon/strelka.svg'
+            "
+            alt="Arrow"
+            (click)="toggleReservoirs()"
+          />
+          <label (click)="toggleReservoirs()">Контр-резервуары</label>
+          <input
+            type="checkbox"
+            checked
+            (change)="toggleGroupVisibility('reservoirs', $event)"
+          />
+        </div>
+        <div
+          *ngIf="isReservoirsOpen && reservoirs.length > 0"
+          class="sub-layers"
+        >
+          <div *ngFor="let obj of reservoirs" class="layer-item sub-sub-layer">
+            <img
+              src="../../../../../assets/data/images/reservoir.png"
+              width="16"
+              height="16"
+            />
+            <label
+              (click)="onFlyToReservoir(obj)"
+              (dblclick)="onOpenReservoirPassport(obj)"
+              >Контр-резервуар ({{ obj.id }})</label
+            >
+            <input
+              type="checkbox"
+              [checked]="obj.visible"
+              (change)="toggleReservoirVisibility(obj.id, $event)"
+            />
+          </div>
+        </div>
+
+        <!-- Водонапорные башни -->
+        <div *ngIf="towers.length > 0" class="layer-item sub-layer">
+          <img
+            class="arrow"
+            [src]="
+              isTowersOpen
+                ? '../../../../../assets/data/icon/strelka-down.svg'
+                : '../../../../../assets/data/icon/strelka.svg'
+            "
+            alt="Arrow"
+            (click)="toggleTowers()"
+          />
+          <label (click)="toggleTowers()">Водонапорные башни</label>
+          <input
+            type="checkbox"
+            checked
+            (change)="toggleGroupVisibility('towers', $event)"
+          />
+        </div>
+        <div *ngIf="isTowersOpen && towers.length > 0" class="sub-layers">
+          <div *ngFor="let obj of towers" class="layer-item sub-sub-layer">
+            <img
+              src="../../../../../assets/data/images/tower.png"
+              width="16"
+              height="16"
+            />
+            <label
+              (click)="onFlyToTower(obj)"
+              (dblclick)="onOpenTowerPassport(obj)"
+              >Водонапорная башня ({{ obj.id }})</label
+            >
+            <input
+              type="checkbox"
+              [checked]="obj.visible"
+              (change)="toggleTowerVisibility(obj.id, $event)"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -291,16 +291,20 @@ export class MapComponent
 
   //выбирает из данных объекты нужного типа и формирует для них базовую структуру.
   private extractObjects(features: any[], type: string) {
-    return features
+    const objects = features
       .filter((f) => f.name_object_type === type)
-      .map((f) => ({
-        id: f.id,
-        position: [f.geometry.coordinates[0], f.geometry.coordinates[1]] as [
-          number,
-          number
-        ],
-        visible: true,
-      }));
+      .map((f) => {
+        return {
+          id: f.id,
+          position: [f.geometry.coordinates[0], f.geometry.coordinates[1]] as [
+            number,
+            number
+          ],
+          visible: true,
+          properties: { ...f.properties },
+        };
+      });
+    return objects;
   }
 
   //отбирает только сегменты труб с геометрией LineString.
@@ -324,20 +328,42 @@ export class MapComponent
       vertices: seg.geometry.coordinates as [number, number][],
       diameter: seg.properties?.['Диаметр'] ?? seg.properties?.diameter ?? 0,
       visible: true,
+      properties: { ...seg.properties },
     }));
   }
 
   private pushState(data: any) {
-    this.objectService['state'].next({
-      wells: data.wells,
-      pipes: data.pipes,
-      users: data.users,
+    const newState = {
+      wells: data.wells.map((w: any) => ({
+        ...w,
+        properties: w.properties,
+      })),
+      pipes: data.pipes.map((p: any) => ({
+        ...p,
+        properties: p.properties || {
+          Имя: `Труба #${p.id}`,
+          Диаметр: 0,
+          Адрес: '-',
+        },
+      })),
+      users: data.users.map((u: any) => ({
+        ...u,
+        properties: u.properties,
+      })),
       captures: data.captures,
       pumps: data.pumps,
-      reservoirs: data.reservoirs,
-      towers: data.towers,
+      reservoirs: data.reservoirs.map((r: any) => ({
+        ...r,
+        properties: r.properties,
+      })),
+      towers: data.towers.map((t: any) => ({
+        ...t,
+        properties: t.properties,
+      })),
       deletedObjects: [],
-    });
+    };
+    this.objectService['state'].next(newState);
+    console.log('[pushState] data to push:', data);
   }
 
   //-----------------------------------
@@ -398,6 +424,7 @@ export class MapComponent
       reservoir: this.objectService.addReservoir.bind(this.objectService),
       tower: this.objectService.addTower.bind(this.objectService),
     };
+    console.log(this.state);
 
     addObjectMap[this.selectedTool!]?.(point);
   }
@@ -409,7 +436,6 @@ export class MapComponent
     type: 'well' | 'user' | 'capture' | 'pump' | 'reservoir' | 'tower'
   ) {
     element.on('mousedown', (event: MouseEvent, d: T) => {
-      console.log('mousedown', type, d, event.button);
       if (this.editMode && event.button === 0) {
         event.preventDefault();
         event.stopPropagation();
@@ -475,7 +501,7 @@ export class MapComponent
     );
   }
 
-  addTower(tower: Tower) {
+  addTower(tower: Tower, isNew = false) {
     this.addObject(tower, 'tower', 'assets/data/icon/Насос.png');
   }
 
@@ -540,8 +566,6 @@ export class MapComponent
 
   // включаем временную линию, вызываем при старте рисования трубы
   private enableTempPipeLine() {
-    console.log('enableTempPipeLine', this.map);
-
     if (!this.map) return;
 
     this.map.on('mousemove', this.onMouseMoveTempPipe);
@@ -607,24 +631,32 @@ export class MapComponent
   }
 
   //обрабатывает клик при рисовании трубы
+  // Обрабатывает клик при рисовании трубы
   handlePipeClick(point: Point, event?: MouseEvent) {
-    if (!this.isDrawingPipe) return;
-
     const snapped = this.getSnappedPoint(point, 15);
+    const target = snapped || point;
 
-    if (this.currentPipe.length === 0) {
+    // Если труба ещё не начата — начинаем её
+    if (!this.isDrawingPipe || this.currentPipe.length === 0) {
+      // Если нет рядом существующего объекта, показываем меню создания
       if (!snapped) {
         this.showStartObjectCreationMenu(point, event as MouseEvent);
         return;
       }
 
-      this.addVertex(snapped);
+      // Иначе начинаем трубу с существующей точки
+      this.isDrawingPipe = true;
+      this.currentPipe = [target];
+      this.skipNextSamePointCheck = true;
+
+      this.drawPipeVertex(target, false);
+      this.enableTempPipeLine();
+      this.redrawAllPipes(this.state.pipes, this.state.users);
       return;
     }
 
-    const target = snapped || point;
+    // Проверка на повтор последней точки
     const last = this.currentPipe.at(-1)!;
-
     if (!this.skipNextSamePointCheck && this.isSamePoint(target, last)) {
       if (this.currentPipe.length > 1) {
         this.finishClickEvent = event as MouseEvent;
@@ -757,16 +789,22 @@ export class MapComponent
 
   //отменяет текущее рисование трубы и сбрасывает временные данные.
   cancelPipeDrawing() {
-    if (!this.isDrawingPipe) return;
+    this.disableTempPipeLine();
 
+    this.isDrawingPipe = false;
     this.currentPipe = [];
     this.tempLine = null;
+    this.pipeDiameter = null;
     this.showDiameterDialog = false;
+    this.showStartObjectMenu = false;
 
-    // перерисовываем, чтобы убрать временные линии
+    if (this.g) {
+      this.g.selectAll('.pipe-temp-line, .pipe-temp-dash').remove();
+    }
+
+    this.resetPipeDrawing();
+
     this.redrawAllPipes(this.state.pipes, this.state.users);
-
-    console.log('Pipe drawing cancelled (ESC, only cleared current pipe)');
   }
 
   handleVertexRightClick(point: Point) {
@@ -911,7 +949,6 @@ export class MapComponent
               to: d[1],
               fromIndex,
               toIndex,
-              id: `${pipeId}_${fromIndex}_${toIndex}`,
             });
           }
         }
@@ -1021,7 +1058,6 @@ export class MapComponent
         'tower'
       )
     );
-
     (users || []).forEach((user) =>
       this.renderSpecialObject(
         user,
@@ -1078,7 +1114,6 @@ export class MapComponent
     type:
       | 'well'
       | 'user'
-      | 'pipe'
       | 'pipe-segment'
       | 'capture'
       | 'pump'
@@ -1104,7 +1139,6 @@ export class MapComponent
   openPassport(
     type:
       | 'well'
-      | 'pipe'
       | 'user'
       | 'pipe-segment'
       | 'capture'
@@ -1114,26 +1148,55 @@ export class MapComponent
       | null,
     data: any
   ) {
+    console.log(this.objectService['state'].getValue());
     if (!type || !data) return;
 
-    let passportId: number | string = data.id;
-    if (
-      type === 'pipe-segment' &&
-      data.pipeId !== undefined &&
-      data.fromIndex !== undefined &&
-      data.toIndex !== undefined
-    ) {
-      passportId = `${data.pipeId}_${data.fromIndex}_${data.toIndex}`;
+    // Берём актуальный объект из state
+    const state = this.objectService['state'].getValue();
+    let objData: any = null;
+
+    switch (type) {
+      case 'well':
+        objData = state.wells.find((w: any) => w.id === data.id);
+        break;
+      case 'user':
+        objData = state.users.find((u: any) => u.id === data.id);
+        break;
+      case 'capture':
+        objData = state.captures.find((c: any) => c.id === data.id);
+        break;
+      case 'pump':
+        objData = state.pumps.find((p: any) => p.id === data.id);
+        break;
+      case 'reservoir':
+        objData = state.reservoirs.find((r: any) => r.id === data.id);
+        break;
+      case 'tower':
+        objData = state.towers.find((t: any) => t.id === data.id);
+        break;
+      case 'pipe-segment':
+        objData = state.pipes.find((p: any) => p.id === data.pipeId);
+        break;
     }
 
-    // Преобразуем passportId в число, если это возможно
-    const numericId =
-      typeof passportId === 'string' ? parseInt(passportId, 10) : passportId;
+    if (!objData) {
+      console.warn('Object not found in state:', type, data.id);
+      return;
+    }
 
+    const passportId = `${type}_${data.id}`;
     this.passports = this.passports.filter(
       (p) => !(p.type === type && p.id === passportId)
     );
-    this.passports.push({ id: numericId, type, data });
+
+    console.log('openPassport called with (from state):', type, objData);
+
+    this.passports.push({
+      id: passportId,
+      type,
+      data: objData, // <-- актуальные свойства с бэка
+    });
+
     this.contextMenuVisible = false;
     this.contextTarget = null;
   }
@@ -1173,7 +1236,7 @@ export class MapComponent
       case 'pipe-segment': // теперь сегмент — это отдельная труба, обрабатываем одинаково
         this.objectService.deletePipeSegment(data.pipeId || data.id);
         this.passports = this.passports.filter(
-          (p) => !(p.type === 'pipe' && p.data.id === (data.pipeId || data.id))
+          (p) => !(p.data.id === (data.pipeId || data.id))
         );
         break;
 
@@ -1214,12 +1277,15 @@ export class MapComponent
   // перерисовываем все объекты на карте заново
   redrawAll() {
     this.g.selectAll('*').remove();
+
+    // при redraw передаём isNew = false
     this.state.wells.forEach((w) => w.visible && this.addWell(w));
     this.state.users.forEach((u) => u.visible && this.addUser(u));
     this.state.captures.forEach((c) => c.visible && this.addCapture(c));
     this.state.pumps.forEach((p) => p.visible && this.addPump(p));
     this.state.reservoirs.forEach((r) => r.visible && this.addReservoir(r));
-    this.state.towers.forEach((t) => t.visible && this.addTower(t));
+    this.state.towers.forEach((t) => t.visible && this.addTower(t, false));
+
     this.redrawAllPipes(this.state.pipes, this.state.users);
   }
 
@@ -1246,34 +1312,6 @@ export class MapComponent
       this.map.getContainer().style.cursor = '';
     }
     this.redrawAll();
-  }
-
-  // начинаем перетаскивание скважины
-  startDragWell(event: MouseEvent, well: Well) {
-    event.stopPropagation();
-    this.map.dragging.disable();
-    this.dragState = { type: 'well', id: well.id };
-    this._dragActive = true;
-    window.addEventListener('mousemove', this.onDragMove);
-    window.addEventListener('mouseup', this.onDragEnd);
-    if (event.currentTarget) {
-      d3.select(event.currentTarget as SVGGElement)
-        .select('circle')
-        .attr('fill', 'lightblue');
-    }
-  }
-
-  // начинаем перетаскивание потребителя
-  startDragUser(event: MouseEvent, user: User) {
-    event.stopPropagation();
-    this.map.dragging.disable();
-    this.dragState = { type: 'user', id: user.id };
-    this._dragActive = true;
-    window.addEventListener('mousemove', this.onDragMove);
-    window.addEventListener('mouseup', this.onDragEnd);
-    if (event.currentTarget) {
-      d3.select(event.currentTarget as SVGImageElement).attr('opacity', 0.7);
-    }
   }
 
   // начинаем перетаскивание вершины трубы
@@ -1341,36 +1379,71 @@ export class MapComponent
 
     switch (this.dragState.type) {
       case 'well':
-        this.objectService.moveWell(this.dragState.id, newPos);
-        break;
       case 'user':
-        this.objectService.moveUser(this.dragState.id, newPos);
-        break;
       case 'capture':
-        this.objectService.moveCapture(this.dragState.id, newPos);
-        break;
       case 'pump':
-        this.objectService.movePump(this.dragState.id, newPos);
-        break;
       case 'reservoir':
-        this.objectService.moveReservoir(this.dragState.id, newPos);
+      case 'tower': {
+        // весь код для спец-объектов
+        const objType = this.dragState.type;
+        const objId = this.dragState.id;
+
+        switch (objType) {
+          case 'well':
+            this.objectService.moveWell(objId, newPos);
+            break;
+          case 'user':
+            this.objectService.moveUser(objId, newPos);
+            break;
+          case 'capture':
+            this.objectService.moveCapture(objId, newPos);
+            break;
+          case 'pump':
+            this.objectService.movePump(objId, newPos);
+            break;
+          case 'reservoir':
+            this.objectService.moveReservoir(objId, newPos);
+            break;
+          case 'tower':
+            this.objectService.moveTower(objId, newPos);
+            break;
+        }
+
+        // смещение delta
+        const delta: Point = [
+          newPos[0] - this.dragState.initialPos[0],
+          newPos[1] - this.dragState.initialPos[1],
+        ];
+
+        // перемещаем вершины труб под объектом
+        this.state.pipes.forEach((pipe) => {
+          pipe.vertices.forEach((v, idx) => {
+            if (this.isSamePoint(v, this.dragState.initialPos)) {
+              const oldPos: Point = [...v];
+              pipe.vertices[idx] = [v[0] + delta[0], v[1] + delta[1]];
+              this.objectService.movePipeVertex(oldPos, pipe.vertices[idx]);
+            }
+          });
+        });
+
+        // обновляем начальную позицию
+        this.dragState.initialPos = [...newPos];
         break;
-      case 'tower':
-        this.objectService.moveTower(this.dragState.id, newPos);
-        break;
-      case 'vertex':
+      }
+      case 'vertex': {
         const draggedPipe = this.state.pipes.find(
           (p) => p.id === this.dragState.pipeId
         );
         if (!draggedPipe) return;
 
         const vertexIndex = this.dragState.vertexIndex;
-        const draggedVertex = draggedPipe.vertices[vertexIndex];
-        if (!draggedVertex) return;
+        const oldPos: Point = [...draggedPipe.vertices[vertexIndex]] as Point;
+        draggedPipe.vertices[vertexIndex] = [...newPos];
 
-        // новое положение вершины — вызываем функцию, которая двигает все совпадающие вершины
-        this.objectService.movePipeVertex(draggedVertex, newPos);
+        // обновляем через сервис
+        this.objectService.movePipeVertex(oldPos, newPos);
         break;
+      }
       case 'segment':
         const pipe = this.state.pipes.find(
           (p) => p.id === this.dragState.pipeId
@@ -1379,40 +1452,36 @@ export class MapComponent
 
         const { fromIndex, toIndex } = this.dragState;
 
-        // Считаем delta относительно последнего события
+        const oldCenter = this.dragState.initialCenter;
         const delta: Point = [
-          newPos[0] - this.dragState.initialCenter[0],
-          newPos[1] - this.dragState.initialCenter[1],
+          newPos[0] - oldCenter[0],
+          newPos[1] - oldCenter[1],
         ];
 
-        // Собираем все вершины, которые нужно двигать
-        const verticesToMove: Set<Point> = new Set();
-        verticesToMove.add(pipe.vertices[fromIndex]);
-        verticesToMove.add(pipe.vertices[toIndex]);
+        // собираем все вершины сегмента
+        const verticesToMove: Point[] = [];
+        for (let i = fromIndex; i <= toIndex; i++) {
+          verticesToMove.push([...pipe.vertices[i]]);
+        }
 
-        this.state.pipes.forEach((p) => {
-          p.vertices.forEach((v) => {
-            if (
-              this.isSamePoint(v, pipe.vertices[fromIndex]) ||
-              this.isSamePoint(v, pipe.vertices[toIndex])
-            ) {
-              verticesToMove.add(v);
-            }
-          });
+        // перемещаем вершины сегмента и уведомляем сервис
+        verticesToMove.forEach((oldPos, idx) => {
+          const vertexIndex = fromIndex + idx;
+          pipe.vertices[vertexIndex] = [
+            pipe.vertices[vertexIndex][0] + delta[0],
+            pipe.vertices[vertexIndex][1] + delta[1],
+          ];
+          this.objectService.movePipeVertex(oldPos, pipe.vertices[vertexIndex]);
         });
 
-        // Применяем delta ко всем вершинам одновременно
-        verticesToMove.forEach((v) => {
-          v[0] += delta[0];
-          v[1] += delta[1];
-        });
-
-        // обновляем центр для следующего события движения
-        this.dragState.initialCenter = newPos;
+        // обновляем центр для следующего события
+        this.dragState.initialCenter = [...newPos];
         break;
     }
-    updateObjectPositions(this.map, this.g);
-    this.redrawAllPipes(this.state.pipes, this.state.users);
+
+    requestAnimationFrame(() => {
+      updateObjectPositions(this.map, this.g);
+    });
   };
 
   // завершаем перетаскивание
@@ -1512,14 +1581,42 @@ export class MapComponent
   ) {
     event.stopPropagation();
     this.map.dragging.disable();
-    this.dragState = { type, id: obj.id };
+
+    // задаём dragState с начальной позицией
+    this.dragState = {
+      type,
+      id: obj.id,
+      initialPos: [...obj.position], // ключ для смещения труб
+    };
+
     this._dragActive = true;
     window.addEventListener('mousemove', this.onDragMove);
     window.addEventListener('mouseup', this.onDragEnd);
+
     if (event.currentTarget) {
-      const el = d3.select(event.currentTarget as SVGGElement).select('image'); // выбираем изображение внутри <g>
-      el.attr('opacity', 0.7); // или другой стиль для визуальной индикации drag
+      const el = d3.select(event.currentTarget as SVGGElement).select('image');
+      el.attr('opacity', 0.7);
     }
+  }
+
+  findVertexUnderPoint(point: Point, maxDistancePx = 20) {
+    let result = null;
+    let minDist = Infinity;
+
+    for (const pipe of this.state.pipes) {
+      pipe.vertices.forEach((v: Point, index: number) => {
+        const p = this.map.latLngToContainerPoint([v[1], v[0]]);
+        const mouse = this.map.latLngToContainerPoint([point[1], point[0]]);
+
+        const dist = p.distanceTo(mouse);
+        if (dist < maxDistancePx && dist < minDist) {
+          minDist = dist;
+          result = { pipeId: pipe.id, vertexIndex: index };
+        }
+      });
+    }
+
+    return result; // либо null
   }
 
   saveAll() {
@@ -1562,6 +1659,7 @@ export class MapComponent
   // -------------------- Обновлённые объекты --------------------
   private sendUpdatedObjects() {
     const updatedObjects = this.objectService.getUpdatedObjects();
+    console.log('Обновлённые объекты перед отправкой:', updatedObjects);
     if (!updatedObjects.length) return;
 
     const features: any[] = [];
@@ -1611,12 +1709,13 @@ export class MapComponent
     const { type, data } = obj;
 
     if (type === 'Труба') {
-      const segments = isNew
-        ? this.getSegmentsFromVertices(data.vertices)
-        : data.updatedSegments || [];
+      let segments = data.updatedSegments;
+
+      if (!segments || segments.length === 0) {
+        segments = this.getSegmentsFromVertices(data.vertices);
+      }
+
       const uniqueSegments = new Set<string>();
-      const name = data._name || `Труба #${data.id}`;
-      const diameter = data.diameter || 0;
 
       segments.forEach(([from, to]: [Point, Point]) => {
         const key = `${from[0]},${from[1]}-${to[0]},${to[1]}`;
@@ -1628,11 +1727,7 @@ export class MapComponent
             data.id,
             'Труба',
             { type: 'LineString', coordinates: [from, to] },
-            {
-              Имя: name,
-              Диаметр: diameter,
-              Адрес: isNew ? 'Пушкина' : '-',
-            }
+            { ...data.properties }
           )
         );
       });
@@ -1640,7 +1735,7 @@ export class MapComponent
       if (!data.position) return;
 
       const geometry = { type: 'Point', coordinates: data.position };
-      const properties = this.getPropertiesByType(type, data.id);
+      const properties = data.properties;
       features.push(this.buildFeature(data.id, type, geometry, properties));
     }
   }
@@ -1656,68 +1751,4 @@ export class MapComponent
   }
 
   // -------------------- Свойства по типу --------------------
-  private getPropertiesByType(type: string, id: number) {
-    switch (type) {
-      case 'Скважина':
-        return { Имя: `Скважина #${id}`, Адрес: '-', Глубина: 0, Диаметр: 0 };
-      case 'Труба':
-        return { Имя: `Труба #${id}`, Диаметр: 0.5, Адрес: '-' };
-      case 'Потребитель':
-        return {
-          Имя: `Потребитель #${id}`,
-          Адрес: 'улица Куйбышева, 47',
-          Напор: 3.0,
-          'Текущий расход воды': 95.0,
-        };
-      case 'Каптаж':
-        return {
-          Имя: `Каптаж #${id}`,
-          Адрес: '-',
-          Производительность: 0,
-          'Бренд насоса': '-',
-          'Глубина скважины': 0,
-          'Диаметр скважины': 0,
-        };
-      case 'Насос':
-        return {
-          Адрес: '-',
-          'Геодезическая отметка': 0,
-          Имя: '-',
-          Источники: '-',
-          Марка: '-',
-          'Напор на входе': 0,
-          'Напор на выходе': 0,
-          'Номинальный напор после насоса': 0,
-          'Номинальный напор развиваемый насосом': 0,
-          'Полный напор на входе': 0,
-          'Полный напор на выходе': 0,
-          'Путь пройденный от источника': 0,
-          'Текущий расход воды': 0,
-        };
-      case 'Контр-резервуар':
-        return {
-          Адрес: '-',
-          'Высота воды': 0,
-          'Геодезическая отметка': 0,
-          Имя: `Насос #${id}`,
-          Напор: 0,
-          'Полный напор': 0,
-          'Расход воды л/с': 0,
-          'Расход воды м3/ч': 0,
-        };
-      case 'Водонапорная башня':
-        return {
-          Адрес: 'микрорайон Молодёжный',
-          'Высота воды': 7.0,
-          'Геодезическая отметка': 13.0,
-          Имя: 'Водонапорная башня Нурлата',
-          Напор: 5.0,
-          'Полный напор': 6.0,
-          'Расход воды л/с': 6.0,
-          'Расход воды м3/ч': 16.0,
-        };
-      default:
-        return { Имя: `${type} #${id}`, Адрес: '-' };
-    }
-  }
 }

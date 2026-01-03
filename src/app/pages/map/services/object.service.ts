@@ -9,6 +9,7 @@ import {
   Reservoir,
   Tower,
   ObjectState,
+  Point,
 } from '../map/map-types';
 
 @Injectable({
@@ -47,60 +48,70 @@ export class ObjectService {
     return this.state.asObservable();
   }
 
-  addWell(position: [number, number]) {
-    const currentState = this.state.value;
-    const newWell = {
-      id: this.wellIdCounter++,
-      position,
-      visible: true,
-    };
-    currentState.wells.push(newWell);
-    this.createdObjects.push({ type: 'Скважина', data: newWell });
-    this.state.next(currentState);
-  }
-
   addPipe(
     vertices: [number, number][],
     diameter: number,
     name: string = `Труба #${this.pipeIdCounter}`
   ) {
+    const newSegments: Pipe[] = [];
+
     for (let i = 1; i < vertices.length; i++) {
       const segment = [vertices[i - 1], vertices[i]];
 
-      const newPipe = {
+      const newPipe: Pipe = {
         id: this.pipeIdCounter++,
         vertices: segment,
         visible: true,
         diameter,
+        type: 'pipe-segment',
+        properties: {
+          Имя: name,
+          Диаметр: diameter,
+          Адрес: '-',
+        },
       };
+
+      newSegments.push(newPipe);
 
       this.createdObjects.push({
         type: 'Труба',
-        data: { ...newPipe, _name: name },
+        data: newPipe,
       });
     }
 
     this.state.next({
       ...this.state.value,
-      pipes: [
-        ...this.state.value.pipes,
-        ...this.createdObjects
-          .filter((obj) => obj.type === 'Труба')
-          .map((obj) => {
-            const { _name, ...pipeData } = obj.data;
-            return pipeData as Pipe;
-          }),
-      ],
+      pipes: [...this.state.value.pipes, ...newSegments],
     });
+  }
+
+  addWell(position: [number, number]) {
+    const currentState = this.state.value;
+
+    const newWell: Well = {
+      id: this.wellIdCounter++,
+      position,
+      visible: true,
+      type: 'well',
+      properties: this.getPropertiesByType('Скважина', this.wellIdCounter),
+    };
+
+    currentState.wells.push(newWell);
+    this.createdObjects.push({ type: 'Скважина', data: newWell });
+    this.state.next(currentState);
   }
 
   addUser(position: [number, number]) {
     const currentState = this.state.value;
-    const newUser = {
+
+    const newUser: User = {
       id: this.userIdCounter++,
       position,
       visible: true,
+      type: 'user',
+      properties: this.getPropertiesByType('Потребитель', this.userIdCounter),
     };
+
     currentState.users.push(newUser);
     this.createdObjects.push({ type: 'Потребитель', data: newUser });
     this.state.next(currentState);
@@ -108,12 +119,15 @@ export class ObjectService {
 
   addCapture(position: [number, number]) {
     const currentState = this.state.value;
+
     const newCapture: Capture = {
       id: this.captureIdCounter++,
       position,
       visible: true,
       type: 'capture',
+      properties: this.getPropertiesByType('Каптаж', this.captureIdCounter),
     };
+
     currentState.captures.push(newCapture);
     this.createdObjects.push({ type: 'Каптаж', data: newCapture });
     this.state.next(currentState);
@@ -121,12 +135,15 @@ export class ObjectService {
 
   addPump(position: [number, number]) {
     const currentState = this.state.value;
+
     const newPump: Pump = {
       id: this.pumpIdCounter++,
       position,
       visible: true,
       type: 'pump',
+      properties: this.getPropertiesByType('Насос', this.pumpIdCounter),
     };
+
     currentState.pumps.push(newPump);
     this.createdObjects.push({ type: 'Насос', data: newPump });
     this.state.next(currentState);
@@ -134,12 +151,18 @@ export class ObjectService {
 
   addReservoir(position: [number, number]) {
     const currentState = this.state.value;
+
     const newReservoir: Reservoir = {
       id: this.reservoirIdCounter++,
       position,
       visible: true,
       type: 'reservoir',
+      properties: this.getPropertiesByType(
+        'Контр-резервуар',
+        this.reservoirIdCounter
+      ),
     };
+
     currentState.reservoirs.push(newReservoir);
     this.createdObjects.push({ type: 'Контр-резервуар', data: newReservoir });
     this.state.next(currentState);
@@ -147,15 +170,99 @@ export class ObjectService {
 
   addTower(position: [number, number]) {
     const currentState = this.state.value;
+
     const newTower: Tower = {
       id: this.towerIdCounter++,
       position,
       visible: true,
       type: 'tower',
+      properties: this.getPropertiesByType(
+        'Водонапорная башня',
+        this.towerIdCounter
+      ),
     };
+
     currentState.towers.push(newTower);
     this.createdObjects.push({ type: 'Водонапорная башня', data: newTower });
     this.state.next(currentState);
+  }
+
+  private getPropertiesByType(type: string, id: number) {
+    switch (type) {
+      case 'Скважина':
+        return { Имя: `Скважина #${id}`, Адрес: '-', Глубина: 0, Диаметр: 0 };
+      case 'Труба':
+        return { Имя: `Труба #${id}`, Диаметр: 0.5, Адрес: '-' };
+      case 'Потребитель':
+        return {
+          Адрес: '-',
+          'Геодезическая отметка': 0.0,
+          'Диаметр выходного отверстия': 0.0,
+          Имя: '-',
+          Категория: '-',
+          'Минимальный напор воды': 0.0,
+          Напор: 0.0,
+          'Относительный расход воды': 0.0,
+          'Полный напор': 0.0,
+          'Расчетный расход воды в будний день': 0.0,
+          'Расчетный расход воды в воскресенье': 0.0,
+          'Расчетный расход воды в праздники': 0.0,
+          'Расчетный расход воды в субботу': 0.0,
+          'Расчётный расход воды': 0.0,
+          'Способ задания потребителя': '-',
+          'Текущий расход воды': 0.0,
+          'Уровень воды': 0.0,
+        };
+      case 'Каптаж':
+        return {
+          Имя: `Каптаж #${id}`,
+          Адрес: '-',
+          Производительность: 0,
+          'Бренд насоса': '-',
+          'Глубина скважины': 0,
+          'Диаметр скважины': 0,
+        };
+      case 'Насос':
+        return {
+          Адрес: '-',
+          'Геодезическая отметка': 0,
+          Имя: '-',
+          Источники: '-',
+          Марка: '-',
+          'Напор на входе': 0,
+          'Напор на выходе': 0,
+          'Номинальный напор после насоса': 0,
+          'Номинальный напор развиваемый насосом': 0,
+          'Полный напор на входе': 0,
+          'Полный напор на выходе': 0,
+          'Путь пройденный от источника': 0,
+          'Текущий расход воды': 0,
+        };
+      case 'Контр-резервуар':
+        return {
+          Адрес: '-',
+          'Высота воды': 0,
+          'Геодезическая отметка': 0,
+          Имя: `Насос #${id}`,
+          Напор: 0,
+          'Полный напор': 0,
+          'Расход воды л/с': 0,
+          'Расход воды м3/ч': 0,
+        };
+      case 'Водонапорная башня':
+        return {
+          Адрес: '-',
+          'Высота воды': 0,
+          'Геодезическая отметка': 0,
+          Имя: '-',
+          Напор: 0,
+          'Полный напор': 0,
+          'Расход воды л/с': 0,
+          'Расход воды м3/ч': 0,
+        };
+      default:
+        return { Имя: `${type} #${id}`, Адрес: '-' };
+    }
   }
 
   deleteWell(id: number) {
@@ -310,13 +417,32 @@ export class ObjectService {
   }
 
   markUpdated(type: string, obj: any) {
-    const index = this.updatedObjects.findIndex(
-      (o) => o.type === type && o.data.id === obj.id
-    );
+    console.log('markUpdated вызван для', type, obj.id);
+    const isNew = this.createdObjects.some((o) => o.data.id === obj.id);
+    if (isNew) return;
+
+    const index = this.updatedObjects.findIndex((o) => o.data.id === obj.id);
+    const actualProperties = { ...obj.properties };
+
     if (index >= 0) {
-      this.updatedObjects[index].data = obj;
+      // ОБЯЗАТЕЛЬНО обновляем специфичные поля для труб и точек
+      if (type === 'Труба') {
+        // Клонируем массив вершин, чтобы разорвать связь со старыми данными
+        this.updatedObjects[index].data.vertices = JSON.parse(
+          JSON.stringify(obj.vertices)
+        );
+      } else {
+        this.updatedObjects[index].data.position = [...obj.position];
+      }
+      this.updatedObjects[index].data.properties = actualProperties;
     } else {
-      this.updatedObjects.push({ type, data: obj });
+      // При первом добавлении делаем глубокую копию данных
+      this.updatedObjects.push({
+        type,
+        data: JSON.parse(
+          JSON.stringify({ ...obj, properties: actualProperties })
+        ),
+      });
     }
   }
 
@@ -372,54 +498,26 @@ export class ObjectService {
     return result;
   }
 
-  movePipeVertex(oldPos: [number, number], newPos: [number, number]) {
-    const currentState = this.state.value;
+  movePipeVertex(oldPos: Point, newPos: Point) {
+    const state = this.state.value;
 
-    console.group('movePipeVertex debug');
-
-    const connectedVertices = this.getAllConnectedVertices(
-      currentState.pipes,
-      oldPos
+    // Находим все сегменты, где используется эта вершина
+    const affectedSegments = state.pipes.filter((pipe) =>
+      pipe.vertices.some((v) => this.isSamePoint(v, oldPos))
     );
 
-    connectedVertices.forEach(({ pipe, vertexIndexes }) => {
-      console.log(
-        `Труба ${pipe.id}: совпавшие вершины ${vertexIndexes.join(', ')}`
+    affectedSegments.forEach((pipe) => {
+      // Проверяем, какая вершина в сегменте совпадает
+      pipe.vertices = pipe.vertices.map((v) =>
+        this.isSamePoint(v, oldPos) ? [...newPos] : v
       );
 
-      vertexIndexes.forEach((i) => {
-        pipe.vertices[i] = [...newPos];
-      });
-
-      const updatedSegments: [[number, number], [number, number]][] = [];
-      vertexIndexes.forEach((i) => {
-        if (i > 0)
-          updatedSegments.push([pipe.vertices[i - 1], pipe.vertices[i]]);
-        if (i < pipe.vertices.length - 1)
-          updatedSegments.push([pipe.vertices[i], pipe.vertices[i + 1]]);
-      });
-
-      const uniqueSegments = updatedSegments.filter(
-        (seg, index, self) =>
-          index ===
-          self.findIndex(
-            (s) =>
-              s[0][0] === seg[0][0] &&
-              s[0][1] === seg[0][1] &&
-              s[1][0] === seg[1][0] &&
-              s[1][1] === seg[1][1]
-          )
-      );
-
-      console.log(
-        `Труба ${pipe.id}: обновлено ${uniqueSegments.length} сегментов`
-      );
-
-      this.markUpdated('Труба', { ...pipe, updatedSegments: uniqueSegments });
+      console.log('markUpdated для трубы:', pipe.id);
+      // Помечаем сегмент как обновленный
+      this.markUpdated('Труба', pipe);
     });
 
-    console.groupEnd();
-    this.state.next(currentState);
+    this.state.next(state);
   }
 
   movePipeSegment(
@@ -434,14 +532,6 @@ export class ObjectService {
     for (let i = fromIndex; i <= toIndex; i++) {
       const oldPos = pipe.vertices[i];
       pipe.vertices[i] = [oldPos[0] + delta[0], oldPos[1] + delta[1]];
-      pipe.userConnections.forEach((conn) => {
-        if (this.isSamePoint(conn.from, oldPos)) {
-          conn.from = [...pipe.vertices[i]];
-        }
-        if (this.isSamePoint(conn.to, oldPos)) {
-          conn.to = [...pipe.vertices[i]];
-        }
-      });
       currentState.wells.forEach((well) => {
         if (this.isSamePoint(well.position, oldPos)) {
           well.position = [...pipe.vertices[i]];

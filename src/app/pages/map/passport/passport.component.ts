@@ -9,6 +9,7 @@ import {
   Output,
   EventEmitter,
 } from '@angular/core';
+import { ObjectService } from '../services/object.service';
 
 interface PassportData {
   label: string;
@@ -27,7 +28,6 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
   @Input() objectData: any;
   @Input() objectType:
     | 'well'
-    | 'pipe'
     | 'pipe-segment'
     | 'user'
     | 'capture'
@@ -38,7 +38,7 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
   @Input() objectId: number | null = null;
 
   // событие "паспорт закрыт"
-  @Output() passportClosed = new EventEmitter<number>(); // Emit objectId when closed
+  @Output() passportClosed = new EventEmitter<number>();
 
   passportData: PassportData[] = [];
   objectName: string = 'Объект';
@@ -72,260 +72,50 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
   fieldTypes: { [key: string]: 'string' | 'number' } = {};
   editableKeys: string[] = [];
 
+  constructor(private objectService: ObjectService) {}
+
   //выбираем название, собираем поля паспорта,
   // задаём что можно редактировать
   ngOnInit() {
-    if (this.objectType === 'well') {
-      this.objectName = `Скважина #${this.objectData.id || 1}`;
-      this.passportData = [
-        { label: 'ID', value: (this.objectData.id || 1).toString() },
-        {
-          label: 'Координаты',
-          value: `[${
-            this.objectData.position ? this.objectData.position[0] : 54.406709
-          }, ${
-            this.objectData.position ? this.objectData.position[1] : 50.793813
-          }]`,
-        },
-        { label: 'Тип', value: 'Скважина' },
-        { label: 'Адрес', value: this.objectData.address || '' },
-        {
-          label: 'Глубина',
-          value: this.objectData.depth != null ? this.objectData.depth : '',
-        },
-        {
-          label: 'Диаметр',
-          value:
-            this.objectData.diameter != null ? this.objectData.diameter : '',
-        },
-        { label: 'Имя', value: this.objectData.name || '' },
-      ];
-      this.editableKeys = ['Адрес', 'Глубина', 'Диаметр', 'Имя'];
-      this.fieldTypes = {
-        Адрес: 'string',
-        Глубина: 'number',
-        Диаметр: 'number',
-        Имя: 'string',
-      };
-    } else if (this.objectType === 'pipe') {
-      this.objectName = `Труба #${this.objectData.id}`;
-      this.passportData = [
-        { label: 'ID', value: this.objectData.id.toString() },
-        { label: 'Вершины', value: this.objectData.vertices.length.toString() },
-        {
-          label: 'Потребители',
-          value: this.objectData.userConnections.length.toString(),
-        },
-        {
-          label: 'Диаметр',
-          value: this.objectData.diameter
-            ? this.objectData.diameter.toString() + ' мм'
-            : '',
-        },
-        { label: 'Тип', value: this.objectData.type || 'Труба' },
-      ];
-      this.editableKeys = ['Диаметр', 'Тип'];
-      this.fieldTypes = { Диаметр: 'number', Тип: 'string' };
-    } else if (this.objectType === 'pipe-segment') {
-      this.objectName = `Отрезок трубы #${this.objectData.pipeId}`;
-      const from = this.objectData.from;
-      const to = this.objectData.to;
-      const fromIndex = this.objectData.fromIndex;
-      const toIndex = this.objectData.toIndex;
-      const length = this.calculateSegmentLength(from, to);
-      this.passportData = [
-        { label: 'ID трубы', value: this.objectData.pipeId.toString() },
-        {
-          label: 'Вершина 1 (индекс)',
-          value: `${fromIndex} [${from[0]}, ${from[1]}]`,
-        },
-        {
-          label: 'Вершина 2 (индекс)',
-          value: `${toIndex} [${to[0]}, ${to[1]}]`,
-        },
-        { label: 'Длина отрезка', value: length.toFixed(2) },
-        { label: 'Тип', value: 'Отрезок трубы' },
-      ];
-      this.editableKeys = ['Длина отрезка', 'Тип'];
-      this.fieldTypes = { 'Длина отрезка': 'number', Тип: 'string' };
-    } else if (this.objectType === 'user') {
-      this.objectName = `Потребитель #${this.objectData.id || 1}`;
-      this.passportData = [
-        { label: 'ID', value: (this.objectData.id || 1).toString() },
-        {
-          label: 'Координаты',
-          value: `[${
-            this.objectData.position ? this.objectData.position[0] : 54.406709
-          }, ${
-            this.objectData.position ? this.objectData.position[1] : 50.793813
-          }]`,
-        },
-        { label: 'Тип', value: 'Потребитель' },
-        { label: 'Адрес', value: this.objectData.address || '' },
-        {
-          label: 'Геодезическая отметка',
-          value:
-            this.objectData.geodeticMark != null
-              ? this.objectData.geodeticMark
-              : '',
-        },
-        {
-          label: 'Диаметр выходного отверстия',
-          value:
-            this.objectData.outletDiameter != null
-              ? this.objectData.outletDiameter
-              : '',
-        },
-        { label: 'Имя', value: this.objectData.name || '' },
-        { label: 'Категория', value: this.objectData.category || '' },
-        {
-          label: 'Минимальный напор воды',
-          value:
-            this.objectData.minPressure != null
-              ? this.objectData.minPressure
-              : '',
-        },
-        {
-          label: 'Напор',
-          value:
-            this.objectData.pressure != null ? this.objectData.pressure : '',
-        },
-        {
-          label: 'Относительный расход воды',
-          value:
-            this.objectData.relativeFlow != null
-              ? this.objectData.relativeFlow
-              : '',
-        },
-        {
-          label: 'Полный напор',
-          value:
-            this.objectData.fullPressure != null
-              ? this.objectData.fullPressure
-              : '',
-        },
-        {
-          label: 'Расчетный расход воды в будний день',
-          value:
-            this.objectData.flowWeekday != null
-              ? this.objectData.flowWeekday
-              : '',
-        },
-        {
-          label: 'Расчетный расход воды в воскресенье',
-          value:
-            this.objectData.flowSunday != null
-              ? this.objectData.flowSunday
-              : '',
-        },
-        {
-          label: 'Расчетный расход воды в праздники',
-          value:
-            this.objectData.flowHoliday != null
-              ? this.objectData.flowHoliday
-              : '',
-        },
-        {
-          label: 'Расчетный расход воды в субботу',
-          value:
-            this.objectData.flowSaturday != null
-              ? this.objectData.flowSaturday
-              : '',
-        },
-        {
-          label: 'Расчётный расход воды',
-          value:
-            this.objectData.flowCalculated != null
-              ? this.objectData.flowCalculated
-              : '',
-        },
-        {
-          label: 'Способ задания потребителя',
-          value: this.objectData.userMethod || '',
-        },
-        {
-          label: 'Текущий расход воды',
-          value:
-            this.objectData.currentFlow != null
-              ? this.objectData.currentFlow
-              : '',
-        },
-        {
-          label: 'Уровень воды',
-          value:
-            this.objectData.waterLevel != null
-              ? this.objectData.waterLevel
-              : '',
-        },
-      ];
-      this.editableKeys = [
-        'Адрес',
-        'Геодезическая отметка',
-        'Диаметр выходного отверстия',
-        'Имя',
-        'Категория',
-        'Минимальный напор воды',
-        'Напор',
-        'Относительный расход воды',
-        'Полный напор',
-        'Расчетный расход воды в будний день',
-        'Расчетный расход воды в воскресенье',
-        'Расчетный расход воды в праздники',
-        'Расчетный расход воды в субботу',
-        'Расчётный расход воды',
-        'Способ задания потребителя',
-        'Текущий расход воды',
-        'Уровень воды',
-      ];
-      this.fieldTypes = {
-        Адрес: 'string',
-        'Геодезическая отметка': 'number',
-        'Диаметр выходного отверстия': 'number',
-        Имя: 'string',
-        Категория: 'string',
-        'Минимальный напор воды': 'number',
-        Напор: 'number',
-        'Относительный расход воды': 'number',
-        'Полный напор': 'number',
-        'Расчетный расход воды в будний день': 'number',
-        'Расчетный расход воды в воскресенье': 'number',
-        'Расчетный расход воды в праздники': 'number',
-        'Расчетный расход воды в субботу': 'number',
-        'Расчётный расход воды': 'number',
-        'Способ задания потребителя': 'string',
-        'Текущий расход воды': 'number',
-        'Уровень воды': 'number',
-      };
-    } else if (
-      this.objectType === 'capture' ||
-      this.objectType === 'pump' ||
-      this.objectType === 'reservoir' ||
-      this.objectType === 'tower'
-    ) {
-      this.objectName = `${this.objectType} #${this.objectData.id}`;
-      this.passportData = [
-        { label: 'Тип', value: this.objectType },
-        { label: 'ID', value: this.objectData.id?.toString() || '' },
-        {
-          label: 'Координаты',
-          value: this.objectData.position
-            ? this.objectData.position.join(', ')
-            : '',
-        },
-      ];
-      this.editableKeys = ['Тип', 'ID', 'Координаты'];
-      this.fieldTypes = { Тип: 'string', ID: 'number', Координаты: 'string' };
-    }
+    if (!this.objectData) return;
+
+    // формируем имя объекта
+    this.objectName =
+      this.objectData.properties?.Имя ||
+      `${this.objectType} #${this.objectData.id || 1}`;
+
+    // формируем паспортные данные только из properties
+    const props = this.objectData.properties || {};
+
+    // создаём массив для отображения в таблице
+    this.passportData = Object.keys(props).map((key) => ({
+      label: key,
+      value: props[key] !== undefined && props[key] !== null ? props[key] : '',
+    }));
+
+    // editableKeys можно сделать либо все, либо по какому-то правилу
+    this.editableKeys = Object.keys(props);
+
+    // fieldTypes можно добавить через правила (числа или строки)
+    this.fieldTypes = {};
+    Object.keys(props).forEach((key) => {
+      this.fieldTypes[key] =
+        typeof props[key] === 'number' ? 'number' : 'string';
+    });
+
+    // копируем в editFields для редактирования
     this.passportData.forEach((item) => {
       this.editFields[item.label] = item.value;
     });
+
     this.visiblePassportData = [...this.passportData];
 
     this.originalZIndex = `${1000 + (this.objectId || 0)}`;
     this.originalHeight = `${this.calculateMaxHeight()}px`;
-    console.log(
-      `ngOnInit: objectId=${this.objectId}, objectName=${this.objectName}, objectType=${this.objectType}, originalZIndex=${this.originalZIndex}, originalHeight=${this.originalHeight}`
-    );
+
+    console.log('objectData:', this.objectData);
+    console.log('properties:', this.objectData.properties);
+    console.log('visiblePassportData (до onSave):', this.visiblePassportData);
   }
 
   //настраиваем размеры и позицию окна на экране,
@@ -762,6 +552,11 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
 
   // процесс изменения высоты
   private onResizeHeight = (event: MouseEvent) => {
+    console.log(
+      'computedHeight:',
+      getComputedStyle(this.passportBlock.nativeElement).height
+    );
+
     if (!this.isResizingHeight) return;
     const deltaY = event.clientY - this.startY;
     const maxHeight = this.calculateMaxHeight();
@@ -894,37 +689,65 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
     this.visiblePassportData = this.passportData.slice(0, maxVisibleRows);
   }
 
-  // вычисляет длину отрезка (для труб)
-  private calculateSegmentLength(
-    from: [number, number],
-    to: [number, number]
-  ): number {
-    // Евклидова длина
-    const dx = to[0] - from[0];
-    const dy = to[1] - from[1];
-    return Math.sqrt(dx * dx + dy * dy);
-  }
-
   // включает режим редактирования
   onEdit() {
     this.editMode = true;
   }
 
-  // сохраняет изменения в полях паспорта
   onSave() {
     this.visiblePassportData.forEach((item) => {
       if (this.editableKeys.includes(item.label)) {
         let val = this.editFields[item.label];
+
         if (this.fieldTypes[item.label] === 'number') {
           val = val === '' || val === '-' ? 0 : parseFloat(val);
         } else {
           val = val === '' ? '-' : val;
         }
-        this.objectData[this.labelToKey(item.label)] = val;
+
+        const key = item.label;
+
+        // Обновляем только properties
+        this.objectData.properties[key] = val;
+
+        // Обновляем отображаемое значение
         item.value = val;
       }
     });
+
+    // Обновляем объект в state с корректным типом на русском
+    if (!this.objectData.localType) {
+      this.objectData.localType = this.objectType;
+    }
+    this.objectService.markUpdated(
+      this.getServerType(this.objectData),
+      this.objectData
+    );
+
     this.editMode = false;
+  }
+
+  private getServerType(obj: any): string {
+    switch (
+      obj.localType // или obj.type
+    ) {
+      case 'well':
+        return 'Скважина';
+      case 'user':
+        return 'Потребитель';
+      case 'pipe-segment':
+        return 'Труба';
+      case 'capture':
+        return 'Каптаж';
+      case 'pump':
+        return 'Насос';
+      case 'reservoir':
+        return 'Контр-резервуар';
+      case 'tower':
+        return 'Водонапорная башня';
+      default:
+        return obj.type || 'Неизвестно';
+    }
   }
 
   // отменяет редактирование и возвращает старые данные
@@ -933,35 +756,6 @@ export class PassportComponent implements AfterViewInit, OnInit, OnDestroy {
       this.editFields[item.label] = item.value;
     });
     this.editMode = false;
-  }
-
-  // переводит название поля (метку) в ключ объекта
-  labelToKey(label: string): string {
-    const map: { [key: string]: string } = {
-      ID: 'id',
-      Координаты: 'position',
-      Тип: 'type',
-      Адрес: 'address',
-      Глубина: 'depth',
-      Диаметр: 'diameter',
-      Имя: 'name',
-      'Геодезическая отметка': 'geodeticMark',
-      'Диаметр выходного отверстия': 'outletDiameter',
-      Категория: 'category',
-      'Минимальный напор воды': 'minPressure',
-      Напор: 'pressure',
-      'Относительный расход воды': 'relativeFlow',
-      'Полный напор': 'fullPressure',
-      'Расчетный расход воды в будний день': 'flowWeekday',
-      'Расчетный расход воды в воскресенье': 'flowSunday',
-      'Расчетный расход воды в праздники': 'flowHoliday',
-      'Расчетный расход воды в субботу': 'flowSaturday',
-      'Расчётный расход воды': 'flowCalculated',
-      'Способ задания потребителя': 'userMethod',
-      'Текущий расход воды': 'currentFlow',
-      'Уровень воды': 'waterLevel',
-    };
-    return map[label] || label;
   }
 
   // возвращает список полей для отображения

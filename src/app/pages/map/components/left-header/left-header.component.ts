@@ -51,12 +51,16 @@ export class LeftHeaderComponent
   isWellsOpen = false;
   isPipesOpen = false;
   isUsersOpen = false;
+  isCapturesOpen = false;
+  isPumpsOpen = false;
+  isReservoirsOpen = false;
+  isTowersOpen = false;
   private subscription: Subscription;
+  pipeSegments: any[] = [];
 
   @Output() openPassportRequested = new EventEmitter<{
     type:
       | 'well'
-      | 'pipe'
       | 'user'
       | 'pipe-segment'
       | 'capture'
@@ -66,7 +70,6 @@ export class LeftHeaderComponent
     data: any;
   }>(); // Событие для открытия паспорта объекта
 
-  openPipeIds: Set<number> = new Set();
   segmentVisibility: Map<string, boolean> = new Map();
 
   constructor(private objectService: ObjectService) {
@@ -78,20 +81,70 @@ export class LeftHeaderComponent
       this.pumps = state.pumps;
       this.reservoirs = state.reservoirs;
       this.towers = state.towers;
+
+      this.updatePipeSegmentsList();
     });
+  }
+
+  updatePipeSegmentsList() {
+    const all: any[] = [];
+    this.pipes.forEach((pipe) => {
+      const segments = this.getPipeSegments(pipe);
+      all.push(...segments);
+    });
+    this.pipeSegments = all;
+  }
+
+  getPipeSegments(pipe: Pipe) {
+    const segments = [];
+    if (!pipe.vertices) return []; // Защита
+
+    for (let i = 1; i < pipe.vertices.length; i++) {
+      const id = `${pipe.id}_${i - 1}_${i}`;
+      segments.push({
+        pipeId: pipe.id,
+        from: pipe.vertices[i - 1],
+        to: pipe.vertices[i],
+        fromIndex: i - 1,
+        toIndex: i,
+        id,
+        // Состояние берем из Map, если его там нет - из самой трубы
+        visible: this.segmentVisibility.has(id)
+          ? this.segmentVisibility.get(id)
+          : pipe.visible ?? true,
+        name: pipe.properties?.Имя || `Труба #${pipe.id}`,
+        diameter: pipe.diameter,
+      });
+    }
+    return segments;
+  }
+
+  togglePipeSegmentVisibility(pipeId: number, segmentId: string, event: Event) {
+    const visible = (event.target as HTMLInputElement).checked;
+    this.segmentVisibility.set(segmentId, visible);
+
+    // Чтобы UI обновился мгновенно, перегенерируем список
+    this.updatePipeSegmentsList();
+
+    const pipe = this.pipes.find((p) => p.id === pipeId);
+    if (pipe) {
+      const allSegments = this.getPipeSegments(pipe);
+      const hasVisibleSegment = allSegments.some(
+        (s) => this.segmentVisibility.get(s.id) !== false
+      );
+      this.objectService.togglePipeVisibility(pipeId, hasVisibleSegment);
+    }
   }
 
   ngOnChanges(changes: SimpleChanges) {
     // Если появилась основная карта, инициализируем мини-карту
     if (changes['mainMap'] && this.mainMap && !this.isInitialized) {
-      console.log('ngOnChanges: mainMap получен:', this.mainMap);
       this.initializeNavigator();
     }
   }
 
   ngAfterViewInit() {
     if (this.mainMap) {
-      console.log('ngAfterViewInit: mainMap доступен:', this.mainMap);
       this.initializeNavigator();
     } else {
       console.warn('ngAfterViewInit: mainMap ещё не доступен');
@@ -111,7 +164,6 @@ export class LeftHeaderComponent
     if (this.isInitialized) return;
     this.isInitialized = true;
 
-    console.log('Инициализация navigatorMap');
     this.navigatorMap = L.map('navigator-map', {
       zoomControl: false,
       dragging: false,
@@ -128,7 +180,6 @@ export class LeftHeaderComponent
     }).addTo(this.navigatorMap);
 
     if (this.mainMap) {
-      console.log('Привязка событий move и zoomend');
       this.mainMap.on('move', () => {
         const center = this.mainMap.getCenter();
         this.navigatorMap.panTo(center, { animate: true, duration: 0.1 });
@@ -139,11 +190,21 @@ export class LeftHeaderComponent
       });
       const initialCenter = this.mainMap.getCenter();
       const initialZoom = this.mainMap.getZoom() - 3;
-      console.log('Начальная синхронизация:', initialCenter, initialZoom);
       this.navigatorMap.setView(initialCenter, initialZoom);
     } else {
       console.error('mainMap не передан');
     }
+  }
+
+  getAllPipeSegments(): any[] {
+    const allSegments: any[] = [];
+
+    this.pipes.forEach((pipe) => {
+      const segments = this.getPipeSegments(pipe);
+      allSegments.push(...segments);
+    });
+
+    return allSegments;
   }
 
   // --- Методы для открытия/закрытия меню ---
@@ -163,6 +224,22 @@ export class LeftHeaderComponent
     this.isUsersOpen = !this.isUsersOpen;
   }
 
+  toggleCaptures() {
+    this.isCapturesOpen = !this.isCapturesOpen;
+  }
+
+  togglePumps() {
+    this.isPumpsOpen = !this.isPumpsOpen;
+  }
+
+  toggleReservoirs() {
+    this.isReservoirsOpen = !this.isReservoirsOpen;
+  }
+
+  toggleTowers() {
+    this.isTowersOpen = !this.isTowersOpen;
+  }
+
   // --- Методы для включения/выключения объектов на карте ---
   toggleWellVisibility(id: number, event: Event) {
     const visible = (event.target as HTMLInputElement).checked;
@@ -171,6 +248,14 @@ export class LeftHeaderComponent
 
   togglePipeVisibility(id: number, event: Event) {
     const visible = (event.target as HTMLInputElement).checked;
+    const pipe = this.pipes.find((p) => p.id === id);
+    if (!pipe) return;
+
+    const segments = this.getPipeSegments(pipe);
+    segments.forEach((segment) => {
+      this.segmentVisibility.set(segment.id, visible);
+    });
+
     this.objectService.togglePipeVisibility(id, visible);
   }
 
@@ -179,41 +264,57 @@ export class LeftHeaderComponent
     this.objectService.toggleUserVisibility(id, visible);
   }
 
-  toggleGroupVisibility(type: 'wells' | 'pipes' | 'users', event: Event) {
+  toggleGroupVisibility(
+    type:
+      | 'wells'
+      | 'pipes'
+      | 'users'
+      | 'captures'
+      | 'pumps'
+      | 'reservoirs'
+      | 'towers',
+    event: Event
+  ) {
     const visible = (event.target as HTMLInputElement).checked;
-    this.objectService.toggleGroupVisibility(type, visible);
-  }
 
-  // --- Работа с трубами и сегментами ---
-  togglePipeSegments(pipeId: number) {
-    if (this.openPipeIds.has(pipeId)) {
-      this.openPipeIds.delete(pipeId);
-    } else {
-      this.openPipeIds.add(pipeId);
+    switch (type) {
+      case 'pipes':
+        // Для труб обновляем все сегменты
+        this.pipes.forEach((pipe) => {
+          this.objectService.togglePipeVisibility(pipe.id, visible);
+
+          // Также обновляем состояние сегментов локально
+          const segments = this.getPipeSegments(pipe);
+          segments.forEach((segment) => {
+            this.segmentVisibility.set(segment.id, visible);
+          });
+        });
+        break;
+      case 'wells':
+      case 'users':
+        this.objectService.toggleGroupVisibility(type, visible);
+        break;
+      case 'captures':
+        this.captures.forEach((capture) => {
+          this.objectService.toggleCaptureVisibility(capture.id, visible);
+        });
+        break;
+      case 'pumps':
+        this.pumps.forEach((pump) => {
+          this.objectService.togglePumpVisibility(pump.id, visible);
+        });
+        break;
+      case 'reservoirs':
+        this.reservoirs.forEach((reservoir) => {
+          this.objectService.toggleReservoirVisibility(reservoir.id, visible);
+        });
+        break;
+      case 'towers':
+        this.towers.forEach((tower) => {
+          this.objectService.toggleTowerVisibility(tower.id, visible);
+        });
+        break;
     }
-  }
-
-  getPipeSegments(pipe: Pipe) {
-    const segments = [];
-    for (let i = 1; i < pipe.vertices.length; i++) {
-      const id = `${pipe.id}_${i - 1}_${i}`;
-      segments.push({
-        pipeId: pipe.id,
-        from: pipe.vertices[i - 1],
-        to: pipe.vertices[i],
-        fromIndex: i - 1,
-        toIndex: i,
-        id,
-        visible: this.segmentVisibility.get(id) ?? true,
-      });
-    }
-    return segments;
-  }
-
-  toggleSegmentVisibility(segment: any, event: Event) {
-    const checked = (event.target as HTMLInputElement).checked;
-    this.segmentVisibility.set(segment.id, checked);
-    // Здесь можно добавить вызов сервиса для обновления видимости на карте, если нужно
   }
 
   // --- Методы для открытия паспортов объектов ---
@@ -221,9 +322,9 @@ export class LeftHeaderComponent
     this.openPassportRequested.emit({ type: 'well', data: well });
   }
 
-  onOpenPipePassport(pipe: Pipe) {
-    this.openPassportRequested.emit({ type: 'pipe', data: pipe });
-  }
+  // onOpenPipePassport(pipe: Pipe) {
+  //   this.openPassportRequested.emit({ type: 'pipe', data: pipe });
+  // }
 
   onOpenUserPassport(user: User) {
     this.openPassportRequested.emit({ type: 'user', data: user });
@@ -254,12 +355,20 @@ export class LeftHeaderComponent
   }
 
   onFlyToPipeSegment(segment: any) {
+    console.log('Попытка flyTo к сегменту:', segment); // ЧТО ПРИХОДИТ?
     if (this.mainMap && segment.from && segment.to) {
       const bounds = L.latLngBounds([
         [segment.from[1], segment.from[0]],
         [segment.to[1], segment.to[0]],
       ]);
+      console.log('Bounds созданы:', bounds);
       this.mainMap.flyToBounds(bounds, { animate: true, maxZoom: 18 });
+    } else {
+      console.error('Ошибка: отсутствуют координаты или карта', {
+        map: !!this.mainMap,
+        from: segment?.from,
+        to: segment?.to,
+      });
     }
   }
 

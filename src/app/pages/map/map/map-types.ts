@@ -2,20 +2,25 @@ export interface Well {
   id: number;
   position: [number, number];
   visible: boolean;
+  type: 'well';
+  properties: any;
 }
 
 export interface Pipe {
   id: number;
   vertices: [number, number][];
-  userConnections: { from: [number, number]; to: [number, number] }[];
   visible: boolean;
   diameter: number;
+  properties: any;
+  type: 'pipe-segment';
 }
 
 export interface User {
   id: number;
   position: [number, number];
   visible: boolean;
+  type: 'user';
+  properties: any;
 }
 
 export interface Capture {
@@ -23,6 +28,7 @@ export interface Capture {
   position: [number, number];
   visible: boolean;
   type: 'capture';
+  properties: any;
 }
 
 export interface Pump {
@@ -30,12 +36,14 @@ export interface Pump {
   position: [number, number];
   visible: boolean;
   type: 'pump';
+  properties: any;
 }
 
 export interface Reservoir {
   id: number;
   position: [number, number];
   visible: boolean;
+  properties: any;
   type: 'reservoir';
 }
 
@@ -44,6 +52,7 @@ export interface Tower {
   position: [number, number];
   visible: boolean;
   type: 'tower';
+  properties: any;
 }
 
 export interface ObjectState {
@@ -62,7 +71,6 @@ export type Point = [number, number];
 export type MapObjectType =
   | 'well'
   | 'user'
-  | 'pipe'
   | 'pipe-segment'
   | 'capture'
   | 'pump'
