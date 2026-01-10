@@ -23,6 +23,14 @@ export interface User {
   properties: any;
 }
 
+export interface Gate {
+  id: number;
+  position: [number, number];
+  visible: boolean;
+  type: 'gate';
+  properties: any;
+}
+
 export interface Capture {
   id: number;
   position: [number, number];

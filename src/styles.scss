@@ -1,68 +1,67 @@
 @font-face {
-    font-family: "Roboto";
-    font-weight: 300;
-    src: local("Roboto"),
-        url("assets/data/fonts/roboto/Roboto-Light.woff2") format("woff2"),
-        url("assets/data/fonts/roboto/roboto-light.woff") format("woff");
+  font-family: "Roboto";
+  font-weight: 300;
+  src: local("Roboto"),
+    url("assets/fonts/roboto/Roboto-Light.woff2") format("woff2"),
+    url("assets/fonts/roboto/roboto-light.woff") format("woff");
 }
 
 @font-face {
-    font-family: "Roboto";
-    font-weight: 400;
-    src: local("Roboto"),
-        url("assets/data/fonts/roboto/Roboto-Regular.woff2") format("woff2"),
-        url("assets/data/fonts/roboto/Roboto-Regular.woff") format("woff");
+  font-family: "Roboto";
+  font-weight: 400;
+  src: local("Roboto"),
+    url("assets/fonts/roboto/Roboto-Regular.woff2") format("woff2"),
+    url("assets/fonts/roboto/Roboto-Regular.woff") format("woff");
 }
 
 @font-face {
-    font-family: "Roboto";
-    font-weight: 500;
-    src: local("Roboto"),
-        url("assets/data/fonts/roboto/Roboto-Medium.woff2") format("woff2"),
-        url("assets/data/fonts/roboto/roboto-medium.woff") format("woff");
+  font-family: "Roboto";
+  font-weight: 500;
+  src: local("Roboto"),
+    url("assets/fonts/roboto/Roboto-Medium.woff2") format("woff2"),
+    url("assets/fonts/roboto/roboto-medium.woff") format("woff");
 }
 
 @font-face {
-    font-family: "Roboto";
-    font-weight: 700;
-    src: local("Roboto"),
-        url("assets/data/fonts/roboto/Roboto-Bold.woff2") format("woff2"),
-        url("assets/data/fonts/roboto/Roboto-Bold.woff") format("woff");
+  font-family: "Roboto";
+  font-weight: 700;
+  src: local("Roboto"),
+    url("assets/fonts/roboto/Roboto-Bold.woff2") format("woff2"),
+    url("assets/fonts/roboto/Roboto-Bold.woff") format("woff");
 }
 body {
-    background-color:#ffffff;
-    font-family: "Roboto";
+  background-color: #ffffff;
+  font-family: "Roboto";
 }
-html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
 }
 
 h1 {
-    font-weight: 600;
-    margin: 0;
-    padding: 0;
-    color: rgba(0, 0, 0, 1);
+  font-weight: 600;
+  margin: 0;
+  padding: 0;
+  color: rgba(0, 0, 0, 1);
 }
 h2 {
-    font-weight: 500;
-    margin: 0;
-    padding: 0;
-    color: rgba(0, 0, 0, 1);
+  font-weight: 500;
+  margin: 0;
+  padding: 0;
+  color: rgba(0, 0, 0, 1);
 }
 p {
-    font-weight: 400;
-    margin: 0;
-    padding: 0;
-    color: rgba(0, 0, 0, 1);
+  font-weight: 400;
+  margin: 0;
+  padding: 0;
+  color: rgba(0, 0, 0, 1);
 }
 .page-background {
-    background-color: #ffffff;
-    width: 100%;
-    height: 100%;
-    overflow-y: auto;
+  background-color: #ffffff;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
 }
-
-  

@@ -1,9 +1,6 @@
 <div>
-  <nav>
+  <nav class="map-header">
     <app-map-header></app-map-header>
-  </nav>
-  <nav>
-    <app-map-menu></app-map-menu>
   </nav>
   <div class="map-top">
     <app-left-header
@@ -171,6 +168,18 @@
           </svg>
 
           <div class="tooltip">Насос</div>
+        </div>
+
+        <div class="tooltip-container">
+          <img
+            src="assets/data/icon/user.png"
+            alt="Контр-резервуар"
+            width="25"
+            height="25"
+            (click)="selectTool('user')"
+            [class.active]="selectedTool === 'user'"
+          />
+          <div class="tooltip">Потребитель</div>
         </div>
 
         <div class="tooltip-container">
